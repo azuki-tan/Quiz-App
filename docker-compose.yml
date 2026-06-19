@@ -1,0 +1,40 @@
+services:
+  backend:
+    build:
+      context: ./code/backend
+      dockerfile: Dockerfile
+    # Không expose port 3000 ra ngoài host
+    # Frontend container kết nối nội bộ qua backend:3000
+    ports:
+      - "8099:3000"
+    env_file:
+      - .env
+    volumes:
+      - ./quiz-data:/app/data
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      - DB_PATH=/app/data/quiz.db
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./code/web
+      dockerfile: Dockerfile
+    ports:
+      - "8098:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  exam-frontend:
+    build:
+      context: ./code/web
+      dockerfile: Dockerfile
+    ports:
+      - "8100:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+
