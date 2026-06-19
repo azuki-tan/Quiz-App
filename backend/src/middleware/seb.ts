@@ -1,17 +1,109 @@
 import crypto from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 
-export function verifySafeExamBrowser(req: Request, res: Response, next: NextFunction) {
+/**
+ * Validates the cryptographic signatures sent by Safe Exam Browser client.
+ * Returns true if request is cryptographically verified to be from a valid SEB client,
+ * or if running in local development/setup mode where validation is bypassed.
+ */
+export function checkSebCryptographicHash(req: Request): boolean {
   const userAgent = (req.headers['user-agent'] || '').toLowerCase();
-  
-  // Check if it's Safe Exam Browser by looking for 'safeexambrowser' or 'seb/' in User-Agent,
-  // or by verifying the presence of SEB custom headers.
-  const hasSebHeader = !!req.headers['x-safeexambrowser-requesthash'] || 
-                       !!req.headers['x-safeexambrowser-configkeyhash'];
-  
   const isSebAgent = userAgent.includes('safeexambrowser') || userAgent.includes('seb/');
+  
+  // Custom headers sent by SEB
+  const requestHashHeader = req.headers['x-safeexambrowser-requesthash'];
+  const configHashHeader = req.headers['x-safeexambrowser-configkeyhash'];
 
-  if (!isSebAgent && !hasSebHeader) {
+  // Check if standard SEB agent signature is present
+  const hasSebHeader = !!requestHashHeader || !!configHashHeader;
+  const isSeb = isSebAgent || hasSebHeader;
+
+  if (!isSeb) {
+    return false;
+  }
+
+  // Get keys from env
+  const bek = process.env.SEB_BROWSER_EXAM_KEY || '';
+  const ck = process.env.SEB_CONFIGURATION_KEY || '';
+
+  // If no keys are configured in env, fallback to standard header presence check
+  if (!bek && !ck) {
+    return true;
+  }
+
+  // Bypass cryptographic validation in local development to ease developer/testing setup
+  const host = req.get('host') || '';
+  const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
+  if (isLocalhost) {
+    return true;
+  }
+
+  const originalUrl = req.originalUrl || '';
+
+  // Construct candidate protocols
+  const protocols = ['https', 'http'];
+  if (req.headers['x-forwarded-proto']) {
+    protocols.unshift(String(req.headers['x-forwarded-proto']));
+  }
+
+  // Construct candidate hosts
+  const hosts = [host];
+  if (req.headers['x-forwarded-host']) {
+    hosts.unshift(String(req.headers['x-forwarded-host']));
+  }
+  if (req.headers['host']) {
+    hosts.push(String(req.headers['host']));
+  }
+
+  const uniqueProtocols = Array.from(new Set(protocols));
+  const uniqueHosts = Array.from(new Set(hosts));
+
+  const candidateUrls: string[] = [];
+  for (const p of uniqueProtocols) {
+    for (const h of uniqueHosts) {
+      if (h) {
+        candidateUrls.push(`${p}://${h}${originalUrl}`);
+      }
+    }
+  }
+
+  // Helper to hash and compare
+  const verifyHash = (headerVal: string, key: string): boolean => {
+    const receivedHash = headerVal.toLowerCase();
+    for (const url of candidateUrls) {
+      // Test url + key order
+      const hash1 = crypto.createHash('sha256').update(url + key, 'utf8').digest('hex').toLowerCase();
+      if (receivedHash === hash1) return true;
+
+      // Test key + url order (just in case)
+      const hash2 = crypto.createHash('sha256').update(key + url, 'utf8').digest('hex').toLowerCase();
+      if (receivedHash === hash2) return true;
+    }
+    return false;
+  };
+
+  // Verify X-SafeExamBrowser-RequestHash against Browser Exam Key (BEK)
+  if (requestHashHeader && bek) {
+    if (verifyHash(String(requestHashHeader), bek)) {
+      return true;
+    }
+  }
+
+  // Verify X-SafeExamBrowser-ConfigKeyHash against Config Key (CK)
+  if (configHashHeader && ck) {
+    if (verifyHash(String(configHashHeader), ck)) {
+      return true;
+    }
+  }
+
+  // If cryptographic keys are provided in production but check failed
+  return false;
+}
+
+export function verifySafeExamBrowser(req: Request, res: Response, next: NextFunction) {
+  const isVerified = checkSebCryptographicHash(req);
+
+  if (!isVerified) {
     return res.status(403).json({
       error: 'ACCESS_DENIED',
       message: 'Bạn bắt buộc phải sử dụng Safe Exam Browser để truy cập bài thi này.',

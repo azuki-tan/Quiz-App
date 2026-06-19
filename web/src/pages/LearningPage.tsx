@@ -4,7 +4,12 @@ import { Play, Settings, CheckCircle2 } from 'lucide-react';
 import type { Quiz, LearningSessionDetail } from '../types';
 
 export const LearningPage: React.FC = () => {
-  const { subjects, quizzes, sessions, deleteSession, navigateTo, getSessionWithDetails, startNewSession } = useApp();
+  const { subjects, quizzes, sessions, deleteSession, navigateTo, getSessionWithDetails, startNewSession, loadData } = useApp();
+
+  useEffect(() => {
+    loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [selectedSubjectId, setSelectedSubjectId] = useState<number>(0);
   const [selectedQuizId, setSelectedQuizId] = useState<number>(0);
@@ -59,24 +64,34 @@ export const LearningPage: React.FC = () => {
   // Sync subject and quizzes
   useEffect(() => {
     if (subjects.length > 0) {
-      // Auto select first subject
-      const firstSubj = subjects[0];
-      setSelectedSubjectId(firstSubj.id);
-      
-      const relatedQuizzes = quizzes.filter(q => q.subjectTargetId === firstSubj.id);
+      // Determine target subject
+      const exists = subjects.some(s => s.id === selectedSubjectId);
+      let targetSubjectId = selectedSubjectId;
+      if (selectedSubjectId === 0 || !exists) {
+        targetSubjectId = subjects[0].id;
+        setSelectedSubjectId(targetSubjectId);
+      }
+
+      // Update filtered quizzes for target subject
+      const relatedQuizzes = quizzes.filter(q => q.subjectTargetId === targetSubjectId);
       setFilteredQuizzes(relatedQuizzes);
-      if (relatedQuizzes.length > 0) {
-        if (learningMode === 'exam') {
-          const randomIndex = Math.floor(Math.random() * relatedQuizzes.length);
-          setSelectedQuizId(relatedQuizzes[randomIndex].id);
-        } else {
-          setSelectedQuizId(relatedQuizzes[0].id);
+
+      // Handle quiz selection in exam mode
+      if (learningMode === 'exam') {
+        const quizExists = relatedQuizzes.some(q => q.id === selectedQuizId);
+        if (selectedQuizId === 0 || !quizExists) {
+          if (relatedQuizzes.length > 0) {
+            const randomIndex = Math.floor(Math.random() * relatedQuizzes.length);
+            setSelectedQuizId(relatedQuizzes[randomIndex].id);
+          } else {
+            setSelectedQuizId(0);
+          }
         }
       } else {
         setSelectedQuizId(0);
       }
     }
-  }, [subjects, quizzes, learningMode]);
+  }, [subjects, quizzes, learningMode, selectedSubjectId, selectedQuizId]);
 
   const handleSubjectChange = (subjectId: number) => {
     setSelectedSubjectId(subjectId);

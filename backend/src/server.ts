@@ -7,7 +7,62 @@ import path from 'path';
 import fs from 'fs';
 import * as db from './db.js';
 import authRouter, { requireAuth, requireAdmin, getAuthenticatedUser } from './auth.js';
-import { verifySafeExamBrowser } from './middleware/seb.js';
+import { verifySafeExamBrowser, checkSebCryptographicHash } from './middleware/seb.js';
+
+function getClientIp(req: express.Request): string {
+  const cfConnectingIp = req.headers['cf-connecting-ip'];
+  if (cfConnectingIp) {
+    return String(cfConnectingIp).trim();
+  }
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded) {
+    const list = String(forwarded).split(',');
+    return list[0].trim();
+  }
+  const realIp = req.headers['x-real-ip'];
+  if (realIp) {
+    return String(realIp).trim();
+  }
+  return req.socket.remoteAddress || '';
+}
+
+function normalizeIp(ip: string): string {
+  let cleaned = ip.trim();
+  if (cleaned.startsWith('::ffff:')) {
+    cleaned = cleaned.substring(7);
+  }
+  if (cleaned === '::1') {
+    cleaned = '127.0.0.1';
+  }
+  return cleaned;
+}
+
+function isIpMatch(ip1: string, ip2: string): boolean {
+  const norm1 = normalizeIp(ip1);
+  const norm2 = normalizeIp(ip2);
+  if (norm1 === norm2) return true;
+
+  // IPv4 /24 subnet comparison (same first 3 octets)
+  // This allows users on multi-WAN networks to resume exams even if NAT IP changes slightly.
+  const ipv4Regex = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+  const match1 = norm1.match(ipv4Regex);
+  const match2 = norm2.match(ipv4Regex);
+  if (match1 && match2) {
+    return match1[1] === match2[1] && match1[2] === match2[2] && match1[3] === match2[3];
+  }
+
+  // IPv6 /64 prefix comparison (same first 4 groups)
+  const parts1 = norm1.split(':');
+  const parts2 = norm2.split(':');
+  if (parts1.length >= 4 && parts2.length >= 4) {
+    return parts1[0] === parts2[0] &&
+           parts1[1] === parts2[1] &&
+           parts1[2] === parts2[2] &&
+           parts1[3] === parts2[3];
+  }
+
+  return false;
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -349,6 +404,23 @@ Do not include any markdown backticks (like \`\`\`json) in your response, return
 
         const authenticatedUser = getAuthenticatedUser(req);
 
+        // IP Lock check for active exam sessions
+        if (session.learningMode === 'exam' && !session.isCompleted) {
+          const clientIp = getClientIp(req);
+          if (!session.lockToken) {
+            // First time starting the exam: bind to this IP address
+            session.lockToken = clientIp;
+            await db.saveSession(session);
+          } else if (!isIpMatch(session.lockToken, clientIp) && !authenticatedUser?.isAdmin) {
+            // Access from a different IP: block the user
+            return res.json({
+              session,
+              isIpBlocked: true,
+              message: 'Bài thi bị khóa do phát hiện truy cập từ địa chỉ IP khác.'
+            });
+          }
+        }
+
         // If it's an active exam mode session, verify SEB
         if (session.learningMode === 'exam' && !session.isCompleted) {
           const sendExamData = async () => {
@@ -368,13 +440,9 @@ Do not include any markdown backticks (like \`\`\`json) in your response, return
             res.json({ session, details, questions });
           };
 
-          const userAgent = (req.headers['user-agent'] || '').toLowerCase();
-          const hasSebHeader = !!req.headers['x-safeexambrowser-requesthash'] || 
-                               !!req.headers['x-safeexambrowser-configkeyhash'];
-          const isSebAgent = userAgent.includes('safeexambrowser') || userAgent.includes('seb/');
-          const isSeb = isSebAgent || hasSebHeader;
+          const isSebVerified = checkSebCryptographicHash(req);
 
-          if (isSeb) {
+          if (isSebVerified) {
             return sendExamData();
           }
 
@@ -449,10 +517,30 @@ Do not include any markdown backticks (like \`\`\`json) in your response, return
 
         const authenticatedUser = getAuthenticatedUser(req);
 
+        // Lock completed sessions to prevent stale requests from overwriting results
+        if (targetSession.isCompleted && !authenticatedUser?.isAdmin) {
+          return res.status(400).json({
+            error: 'SESSION_LOCKED',
+            message: 'Phiên thi này đã kết thúc và không thể sửa đổi.'
+          });
+        }
+
+        // IP Lock check: prevent updating exam sessions from a different IP
+        if (targetSession.learningMode === 'exam' && !targetSession.isCompleted) {
+          const clientIp = getClientIp(req);
+          if (targetSession.lockToken && !isIpMatch(targetSession.lockToken, clientIp) && !authenticatedUser?.isAdmin) {
+            return res.status(403).json({
+              error: 'IP_BLOCKED',
+              message: 'Bài thi bị khóa do phát hiện truy cập từ địa chỉ IP khác.'
+            });
+          }
+        }
+
         const handleSave = async (userEmail?: string, userName?: string, userMssv?: string) => {
           const sessionToSave = {
             ...session,
             id: targetSession.id,
+            lockToken: targetSession.lockToken,
             userEmail: targetSession.userEmail || userEmail || null,
             userName: targetSession.userName || userName || null,
             userMssv: targetSession.userMssv || userMssv || null
@@ -554,30 +642,6 @@ Do not include any markdown backticks (like \`\`\`json) in your response, return
     app.get('/api/config/seb', async (req, res) => {
       try {
         const host = req.get('host') || '';
-        const sessionToken = req.query.sessionToken || req.query.sessionId;
-        // Construct exam start URL dynamically based on requesting host
-        let examStartUrl = '';
-
-        if (host.includes('e-learning.myazuki.net') || host.includes('seb.myazuki.net') || host.includes('exam.myazuki.net')) {
-          examStartUrl = 'https://seb.myazuki.net';
-        } else if (host.includes('localhost') || host.includes('127.0.0.1')) {
-          const portIndex = host.indexOf(':');
-          const baseHost = portIndex !== -1 ? host.substring(0, portIndex) : host;
-          examStartUrl = `http://${baseHost}:8100`;
-        } else {
-          // Fallback parsing for other custom domains
-          const parts = host.split('.');
-          if (parts.length > 2) {
-            parts[0] = 'seb';
-            examStartUrl = `https://${parts.join('.')}`;
-          } else {
-            examStartUrl = `https://seb.${host}`;
-          }
-        }
-
-        if (sessionToken) {
-          examStartUrl += `?sessionToken=${sessionToken}`;
-        }
 
         const __filename = fileURLToPath(import.meta.url);
         const __dirname = path.dirname(__filename);
@@ -589,18 +653,28 @@ Do not include any markdown backticks (like \`\`\`json) in your response, return
 
         let xmlContent = fs.readFileSync(configPath, 'utf8');
 
-        // Dynamically replace the startURL inside the XML template
-        const startUrlRegex = /<key>startURL<\/key>\s*<string>[^<]*<\/string>/;
-        xmlContent = xmlContent.replace(
-          startUrlRegex,
-          `<key>startURL</key>\n    <string>${examStartUrl}</string>`
-        );
+        // For local development on localhost/127.0.0.1, we dynamically modify the startURL
+        // to point to local development port (typically 8100 or 5173).
+        // For production, we DO NOT modify the XML at all, preserving the static file hash
+        // and matching the Browser Exam Key (BEK).
+        const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
+        if (isLocalhost) {
+          const portIndex = host.indexOf(':');
+          const baseHost = portIndex !== -1 ? host.substring(0, portIndex) : host;
+          const localStartUrl = `http://${baseHost}:8100`;
+
+          const startUrlRegex = /<key>startURL<\/key>\s*<string>[^<]*<\/string>/;
+          xmlContent = xmlContent.replace(
+            startUrlRegex,
+            `<key>startURL</key>\n    <string>${localStartUrl}</string>`
+          );
+        }
 
         res.setHeader('Content-Type', 'application/x-safeexambrowser');
         res.setHeader('Content-Disposition', 'attachment; filename="exam_config.seb"');
         res.send(xmlContent);
       } catch (err: any) {
-        console.error('Error generating dynamic SEB config:', err);
+        console.error('Error serving SEB config:', err);
         res.status(500).json({ error: err.message });
       }
     });

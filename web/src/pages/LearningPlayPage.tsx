@@ -159,6 +159,8 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
 
   // Auto-save progress when component unmounts or page reloads/closes
   useEffect(() => {
+    if (requireSeb) return;
+
     const saveProgressSync = () => {
       if (isSubmittingRef.current) return;
       const { session: s, currentIndex: currentIdx, details: currentD } = latestStateRef.current;
@@ -195,7 +197,7 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
       window.removeEventListener('beforeunload', handleBeforeUnload);
       saveProgressSync();
     };
-  }, []);
+  }, [requireSeb]);
 
   const loadSession = async () => {
     setLoading(true);
@@ -207,7 +209,7 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
         return;
       }
 
-      const { session: s, details: d, requireSeb: reqSeb } = data as any;
+      const { session: s, details: d, requireSeb: reqSeb, isIpBlocked } = data as any;
 
       if (reqSeb) {
         setSession(s);
@@ -224,14 +226,7 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
 
       // Check Lock Token
       if (s.learningMode === 'exam') {
-        const localToken = localStorage.getItem(`exam_lock_${s.id}`);
-        if (!s.lockToken) {
-          // Generate new token
-          const newToken = Math.random().toString(36).substring(2) + Date.now().toString(36);
-          localStorage.setItem(`exam_lock_${s.id}`, newToken);
-          s.lockToken = newToken;
-          await updateSession(s, d);
-        } else if (localToken !== s.lockToken) {
+        if (isIpBlocked) {
           setIsBlocked(true);
           setLoading(false);
           return;
@@ -390,6 +385,7 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
 
   // Auto-save exam progress every 10 minutes
   useEffect(() => {
+    if (requireSeb) return;
     if (!session || session.isCompleted || session.learningMode !== 'exam') return;
 
     const interval = setInterval(() => {
@@ -412,7 +408,7 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
     }, 10 * 60 * 1000); // 10 minutes
 
     return () => clearInterval(interval);
-  }, [session?.id, session?.learningMode, session?.isCompleted, updateSession]);
+  }, [session?.id, session?.learningMode, session?.isCompleted, updateSession, requireSeb]);
 
   // Current Question elements
   const currentDetail = details[currentIndex];
@@ -904,7 +900,118 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
   }
 
   if (requireSeb && session) {
-    const launchUrl = `sebs://${window.location.host}/api/config/seb?sessionToken=${session.sessionToken || sessionId}`;
+    const isRunningInSeb = navigator.userAgent.toLowerCase().includes('safeexambrowser') || 
+                           navigator.userAgent.toLowerCase().includes('seb/');
+    
+    if (isRunningInSeb) {
+      return (
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '100vh',
+          width: '100vw',
+          backgroundColor: '#FEF2F2',
+          color: '#991B1B',
+          fontFamily: 'Inter, system-ui, sans-serif',
+          padding: '20px',
+          textAlign: 'center'
+        }}>
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            padding: '40px',
+            borderRadius: '16px',
+            boxShadow: '0 10px 25px -5px rgba(220, 38, 38, 0.05), 0 8px 10px -6px rgba(220, 38, 38, 0.05)',
+            maxWidth: '550px',
+            width: '100%',
+            border: '1px solid #FCA5A5'
+          }}>
+            <div style={{
+              width: '64px',
+              height: '64px',
+              borderRadius: '50%',
+              backgroundColor: 'rgba(239, 68, 68, 0.08)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 24px auto',
+              border: '2px solid #EF4444'
+            }}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="15" y1="9" x2="9" y2="15"/>
+                <line x1="9" y1="9" x2="15" y2="15"/>
+              </svg>
+            </div>
+
+            <h2 style={{ fontSize: '20px', fontWeight: 800, marginBottom: '12px', color: '#991B1B', letterSpacing: '-0.025em' }}>
+              CẤU HÌNH TRÌNH DUYỆT KHÔNG HỢP LỆ
+            </h2>
+            <p style={{ fontSize: '14px', color: '#7F1D1D', lineHeight: '1.6', marginBottom: '28px' }}>
+              Phiên bản hoặc cấu hình **Safe Exam Browser (SEB)** bạn đang sử dụng không khớp với yêu cầu bảo mật của kỳ thi này (Lệch mã khóa cấu hình BEK/CK).
+            </p>
+
+            <div style={{
+              backgroundColor: '#FFF5F5',
+              borderRadius: '12px',
+              padding: '20px',
+              textAlign: 'left',
+              marginBottom: '28px',
+              border: '1px solid #FEE2E2',
+              fontSize: '13px',
+              color: '#991B1B',
+              lineHeight: '1.6'
+            }}>
+              <h4 style={{ fontWeight: 'bold', marginBottom: '8px' }}>Nguyên nhân phổ biến:</h4>
+              <ul style={{ paddingLeft: '18px', listStyleType: 'disc', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <li>Mã cấu hình bảo mật (SEB Keys) trong file cấu hình `.seb` bạn tải về không khớp với khóa được thiết lập trên server.</li>
+                <li>Bạn đã tự ý thay đổi file `.seb` trước khi khởi chạy.</li>
+                <li>Trình duyệt SEB bạn sử dụng đã bị sửa đổi hoặc không đảm bảo tính toàn vẹn.</li>
+              </ul>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <button
+                onClick={() => window.location.reload()}
+                style={{
+                  padding: '14px 28px',
+                  backgroundColor: '#EF4444',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '15px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px 0 rgba(239, 68, 68, 0.3)'
+                }}
+              >
+                Tải lại trang (Reload)
+              </button>
+
+              <button
+                onClick={() => navigateTo({ type: 'learning' })}
+                style={{
+                  padding: '10px 24px',
+                  backgroundColor: 'transparent',
+                  color: '#4B5563',
+                  border: '1px solid #D1D5DB',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: 'pointer'
+                }}
+              >
+                Quay lại trang chủ
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const protocol = window.location.protocol === 'https:' ? 'sebs://' : 'seb://';
+    const launchUrl = `${protocol}${window.location.host}/api/config/seb??sessionToken=${session.sessionToken || sessionId}`;
     
     return (
       <div style={{

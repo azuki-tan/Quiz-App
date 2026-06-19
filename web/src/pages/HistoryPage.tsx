@@ -4,8 +4,14 @@ import { useAuth } from '../context/AuthContext';
 import { History, Trash2, Eye, Award } from 'lucide-react';
 
 export const HistoryPage: React.FC = () => {
-  const { subjects, quizzes, sessions, deleteSession, navigateTo } = useApp();
+  const { subjects, quizzes, sessions, deleteSession, navigateTo, loadData } = useApp();
   const { currentUser } = useAuth();
+  
+  React.useEffect(() => {
+    loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const isAdmin = currentUser?.isAdmin ?? false;
 
   // Filter only exam sessions
