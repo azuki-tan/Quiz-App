@@ -371,7 +371,7 @@ export const LearningPage: React.FC = () => {
             </li>
             <li className="flex gap-2">
               <CheckCircle2 size={16} className="flex-shrink-0" style={{ color: 'var(--toast-success)' }} />
-              <span>Sử dụng <strong>Enter</strong> để kiểm tra kết quả vừa chọn.</span>
+              <span>Sử dụng các phím số <strong>1, 2, 3...</strong> ứng với các lựa chọn <strong>A, B, C...</strong> để chọn nhanh đáp án.</span>
             </li>
             <li className="flex gap-2">
               <CheckCircle2 size={16} className="flex-shrink-0" style={{ color: 'var(--toast-success)' }} />

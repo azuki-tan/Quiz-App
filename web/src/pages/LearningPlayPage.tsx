@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
-import { ArrowLeft, Clock, CheckCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { LearningSession, LearningSessionDetail, Question, Answer } from '../types';
 import confetti from 'canvas-confetti';
 import { cleanHtmlExplanation } from '../utils/html';
@@ -43,6 +43,7 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
   const [openCodeError, setOpenCodeError] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [requireSeb, setRequireSeb] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(true);
 
   // get study stats of "Đang học" and "Đã học"
   const getStudyStats = () => {
@@ -575,25 +576,149 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Evaluate current answer for Practice Mode (including smart recall cloning)
+  const evaluateAnswer = async (updatedDetailsList: LearningSessionDetail[]) => {
+    if (!session || !currentQuestion) return;
+
+    const detail = updatedDetailsList[currentIndex];
+    const correctIds = currentQuestion.answersList?.filter(a => a.isCorrect).map(a => Number(a.id)) || [];
+    const selectedIds = detail.selectedAnswersList ? detail.selectedAnswersList.map(Number) : [];
+
+    const isCorrect = correctIds.length === selectedIds.length &&
+      correctIds.every(id => selectedIds.includes(id));
+
+    detail.isChecked = true;
+    detail.isCorrect = isCorrect;
+
+    // Apply smart recall mechanism like study mode
+    const currentQId = detail.questionTargetId;
+    const progressKey = `practice_progress_${session.id}_${currentQId}`;
+
+    if (!isCorrect) {
+      // Save progress as '0' in localStorage (specifically for this session and question)
+      localStorage.setItem(progressKey, '0');
+
+      // Clone the current detail
+      const clonedDetail: LearningSessionDetail = {
+        ...detail,
+        id: -Math.floor(Math.random() * 1000000000), // unique temporary negative ID
+        isChecked: false,
+        isCorrect: null,
+        selectedAnswersList: [],
+        isSeen: false,
+      };
+
+      // Spaced recall position (reinforcement): closer gap (insert +3 slots away)
+      const remainingCount = updatedDetailsList.length - (currentIndex + 1);
+      let insertIndex = updatedDetailsList.length; // default to the end
+      if (remainingCount >= 3) {
+        insertIndex = currentIndex + 3;
+      } else if (remainingCount === 2) {
+        insertIndex = currentIndex + 2;
+      }
+
+      updatedDetailsList.splice(insertIndex, 0, clonedDetail);
+
+      // Update allQuestionIdsRef
+      const updatedQIds = [...allQuestionIdsRef.current];
+      updatedQIds.splice(insertIndex, 0, currentQId);
+      allQuestionIdsRef.current = updatedQIds;
+    } else {
+      // Read current progress from localStorage
+      const currentProgress = localStorage.getItem(progressKey);
+      let newProgress = '2'; // default: mastered immediately if not failed before
+      let shouldReinforce = false;
+
+      if (currentProgress === '0') {
+        newProgress = '1';
+        shouldReinforce = true;
+      } else if (currentProgress === '1') {
+        newProgress = '2';
+        shouldReinforce = false;
+      }
+      localStorage.setItem(progressKey, newProgress);
+
+      if (shouldReinforce) {
+        // Clone the current detail for spaced recall check
+        const clonedDetail: LearningSessionDetail = {
+          ...detail,
+          id: -Math.floor(Math.random() * 1000000000), // unique temporary negative ID
+          isChecked: false,
+          isCorrect: null,
+          selectedAnswersList: [],
+          isSeen: false,
+        };
+
+        // Spaced recurrence position (longer gap: insert +6 slots away)
+        const remainingCount = updatedDetailsList.length - (currentIndex + 1);
+        let insertIndex = updatedDetailsList.length;
+        if (remainingCount >= 6) {
+          insertIndex = currentIndex + 6;
+        }
+
+        updatedDetailsList.splice(insertIndex, 0, clonedDetail);
+
+        // Update allQuestionIdsRef
+        const updatedQIds = [...allQuestionIdsRef.current];
+        updatedQIds.splice(insertIndex, 0, currentQId);
+        allQuestionIdsRef.current = updatedQIds;
+      }
+    }
+
+    setDetails(updatedDetailsList);
+    setIsAnswerChecked(true);
+    setShowExplanation(true);
+
+    // Save session state to server
+    const updatedSession: LearningSession = {
+      ...session,
+      currentIndex,
+      studyTime: studyTimeCounter.current
+    };
+    await updateSession(updatedSession, updatedDetailsList);
+  };
+
   // Answer selections
   const handleSelectAnswer = (answerId: number) => {
-    if (session?.isCompleted || isAnswerChecked) return;
+    if (!session || session.isCompleted || isAnswerChecked) return;
 
     const updatedDetails = [...details];
     const detail = updatedDetails[currentIndex];
-
-    // Allow multiple selection (toggle answerId in list)
-    const selectedIds = detail.selectedAnswersList ? detail.selectedAnswersList.map(Number) : [];
-    if (selectedIds.includes(Number(answerId))) {
-      detail.selectedAnswersList = selectedIds.filter(id => id !== Number(answerId));
-    } else {
-      detail.selectedAnswersList = [...selectedIds, Number(answerId)];
-    }
     detail.isSeen = true;
 
-    setDetails(updatedDetails);
-  };
+    if (session.learningMode === 'practice') {
+      const correctIds = currentQuestion?.answersList?.filter(a => a.isCorrect).map(a => Number(a.id)) || [];
 
+      if (correctIds.length <= 1) {
+        // Single choice question
+        detail.selectedAnswersList = [Number(answerId)];
+        setDetails(updatedDetails);
+        evaluateAnswer(updatedDetails);
+      } else {
+        // Multiple choice question
+        const selectedIds = detail.selectedAnswersList ? detail.selectedAnswersList.map(Number) : [];
+        if (selectedIds.includes(Number(answerId))) {
+          detail.selectedAnswersList = selectedIds.filter(id => id !== Number(answerId));
+        } else {
+          detail.selectedAnswersList = [...selectedIds, Number(answerId)];
+        }
+        setDetails(updatedDetails);
+
+        if (detail.selectedAnswersList.length === correctIds.length) {
+          evaluateAnswer(updatedDetails);
+        }
+      }
+    } else {
+      // Exam or Study mode
+      const selectedIds = detail.selectedAnswersList ? detail.selectedAnswersList.map(Number) : [];
+      if (selectedIds.includes(Number(answerId))) {
+        detail.selectedAnswersList = selectedIds.filter(id => id !== Number(answerId));
+      } else {
+        detail.selectedAnswersList = [...selectedIds, Number(answerId)];
+      }
+      setDetails(updatedDetails);
+    }
+  };
 
   const handleCheckAnswer = () => {
     if (isAnswerChecked || !session || !currentQuestion) return;
@@ -809,6 +934,23 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
       if (loading || !session || session.isCompleted) return;
       if (session.learningMode === 'exam' && !isExamStarted) return;
 
+      // Ignore keystrokes when focused inside input elements or contenteditable
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return;
+      }
+
+      // Map digit keys 1-9 to select answers
+      const digitMatch = e.code.match(/^Digit([1-9])$/) || e.key.match(/^([1-9])$/);
+      if (digitMatch && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        const optionIndex = parseInt(digitMatch[1], 10) - 1;
+        if (currentAnswers && optionIndex < currentAnswers.length) {
+          e.preventDefault();
+          handleSelectAnswer(currentAnswers[optionIndex].id);
+          return;
+        }
+      }
+
       const keys = config.keyBindings;
 
       if (session.learningMode === 'study') {
@@ -844,7 +986,7 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [loading, session, currentIndex, details, isAnswerChecked, config, isFlipped, handleStillLearning, handleKnown, handlePrev, handleNext, handleCheckAnswer, isExamStarted]);
+  }, [loading, session, currentIndex, details, isAnswerChecked, config, isFlipped, handleStillLearning, handleKnown, handlePrev, handleNext, handleCheckAnswer, isExamStarted, currentAnswers]);
 
   if (isBlocked) {
     return (
@@ -1837,13 +1979,33 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
           </div>
         </div>
 
-        {/* Timer/Clock */}
-        {(session.learningMode as string) === 'exam' && timeLeft !== null && (
-          <div className="flex items-center gap-2 px-4 py-2" style={{ backgroundColor: 'rgba(255, 77, 79, 0.1)', border: '1px solid rgba(255, 77, 79, 0.2)', borderRadius: '8px', color: 'var(--toast-error)', fontWeight: 700 }}>
-            <Clock size={18} />
-            <span>{formatTime(timeLeft)}</span>
-          </div>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {session.learningMode !== 'study' && (
+            <button
+              onClick={() => setShowSidebar(prev => !prev)}
+              className="btn btn-secondary flex items-center gap-1"
+              style={{
+                padding: '8px 16px',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                borderRadius: '8px',
+                border: '1px solid var(--border-color)',
+                backgroundColor: '#FFFFFF',
+                cursor: 'pointer'
+              }}
+            >
+              {showSidebar ? 'Ẩn bản đồ' : 'Hiện bản đồ'}
+            </button>
+          )}
+
+          {/* Timer/Clock */}
+          {(session.learningMode as string) === 'exam' && timeLeft !== null && (
+            <div className="flex items-center gap-2 px-4 py-2" style={{ backgroundColor: 'rgba(255, 77, 79, 0.1)', border: '1px solid rgba(255, 77, 79, 0.2)', borderRadius: '8px', color: 'var(--toast-error)', fontWeight: 700 }}>
+              <Clock size={18} />
+              <span>{formatTime(timeLeft)}</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Progress Bar */}
@@ -2209,17 +2371,6 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
               </button>
 
               <div className="flex gap-2">
-                {session.learningMode === 'practice' && !isAnswerChecked && (
-                  <button
-                    className="btn btn-primary"
-                    onClick={handleCheckAnswer}
-                    disabled={!currentDetail || !Array.isArray(currentDetail.selectedAnswersList) || currentDetail.selectedAnswersList.length === 0}
-                  >
-                    <CheckCircle size={18} />
-                    <span>Kiểm tra (Enter)</span>
-                  </button>
-                )}
-
                 {(session.learningMode as string) === 'exam' && currentIndex === details.length - 1 && (
                   <button
                     className="btn btn-danger"
@@ -2243,7 +2394,7 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
         </div>
 
         {/* Question Panel Sidebar (hidden in Study mode) */}
-        {session.learningMode !== 'study' && (
+        {session.learningMode !== 'study' && showSidebar && (
           <div
             className="card flex flex-col gap-4"
             style={{
