@@ -1,0 +1,4 @@
+SAU KHI CẤU HÌNH FILE THI BẰNG SEB CONFIG TOOL:
+1. Hãy lưu hoặc copy file cấu hình đó thành tên "exam_config.seb"
+2. Đặt file đó vào thư mục này: "code/web/public/configs/exam_config.seb"
+3. Khi thí sinh bấm vào thi trong giao diện web, trình duyệt sẽ kích hoạt giao thức sebs://e-learning.myazuki.net/configs/exam_config.seb?sessionId=... để chạy cấu hình này trong SEB.

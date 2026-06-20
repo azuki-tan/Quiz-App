@@ -44,7 +44,7 @@ const AppContent: React.FC = () => {
   React.useEffect(() => {
     if (isExamSubdomain) return;
     if (authLoading) return;
-    
+
     // Skip auth redirection for play and result pages under SEB
     if (isSeb && (activePage.type === 'learning-play' || activePage.type === 'learning-result')) {
       return;
@@ -58,7 +58,7 @@ const AppContent: React.FC = () => {
       if (location.pathname === '/login' || location.pathname === '/') {
         navigate('/dashboard');
       }
-      
+
       // Redirect non-admins away from admin-only pages to /learning
       const adminOnlyRoutes = ['/dashboard', '/library', '/settings', '/users'];
       if (!currentUser.isAdmin && adminOnlyRoutes.includes(location.pathname)) {

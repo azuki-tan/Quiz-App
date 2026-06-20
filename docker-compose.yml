@@ -1,10 +1,8 @@
 services:
   backend:
     build:
-      context: ./code/backend
+      context: ./backend
       dockerfile: Dockerfile
-    # Không expose port 3000 ra ngoài host
-    # Frontend container kết nối nội bộ qua backend:3000
     ports:
       - "8099:3000"
     env_file:
@@ -19,7 +17,7 @@ services:
 
   frontend:
     build:
-      context: ./code/web
+      context: ./web
       dockerfile: Dockerfile
     ports:
       - "8098:80"
@@ -29,7 +27,7 @@ services:
 
   exam-frontend:
     build:
-      context: ./code/web
+      context: ./web
       dockerfile: Dockerfile
     ports:
       - "8100:80"

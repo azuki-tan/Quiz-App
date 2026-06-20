@@ -59,7 +59,8 @@ export async function initDb() {
       fontSize INTEGER NOT NULL,
       enableQuickAnswer INTEGER NOT NULL,
       isMouseEnabled INTEGER NOT NULL,
-      keyBindings TEXT NOT NULL -- JSON string
+      keyBindings TEXT NOT NULL, -- JSON string
+      examOpenCode TEXT DEFAULT '12345'
     );
   `);
     // Create dynamic tables in userDb
@@ -93,7 +94,8 @@ export async function initDb() {
       sessionToken TEXT,
       userEmail TEXT,
       userName TEXT,
-      userMssv TEXT
+      userMssv TEXT,
+      openCode TEXT
     );
 
     CREATE TABLE IF NOT EXISTS session_details (
@@ -117,8 +119,8 @@ export async function initDb() {
             checkQuestion: ["Enter"]
         };
         await quizDb.run(`
-      INSERT INTO config (id, fontFamily, fontSize, enableQuickAnswer, isMouseEnabled, keyBindings)
-      VALUES (1, 'Microsoft Sans Serif', 14, 0, 1, ?)
+      INSERT INTO config (id, fontFamily, fontSize, enableQuickAnswer, isMouseEnabled, keyBindings, examOpenCode)
+      VALUES (1, 'Microsoft Sans Serif', 14, 0, 1, ?, '12345')
     `, JSON.stringify(defaultKeyBindings));
     }
     // Migrations: add new columns if they don't exist yet (questions table on quizDb)
@@ -200,6 +202,17 @@ export async function initDb() {
       DROP TABLE IF EXISTS users;
     `);
         console.log('Migration complete. Old user tables dropped from quizDb.');
+    }
+    // Dynamic Column migrations for updates
+    const sessionPragma = await userDb.all('PRAGMA table_info(sessions)');
+    const sessionCols = sessionPragma.map((c) => c.name);
+    if (!sessionCols.includes('openCode')) {
+        await userDb.run('ALTER TABLE sessions ADD COLUMN openCode TEXT');
+    }
+    const configPragma = await quizDb.all('PRAGMA table_info(config)');
+    const configCols = configPragma.map((c) => c.name);
+    if (!configCols.includes('examOpenCode')) {
+        await quizDb.run("ALTER TABLE config ADD COLUMN examOpenCode TEXT DEFAULT '12345'");
     }
     console.log('SQLite Databases initialized successfully.');
     console.log('  - Static quiz database at:', dbPath);
@@ -325,13 +338,15 @@ export async function saveSession(session) {
         shuffleQuestions = ?, shuffleAnswers = ?, currentIndex = ?, studyTime = ?, 
         timeLimit = ?, isCompleted = ?, endTime = ?, totalCorrect = ?, totalWrong = ?,
         identifyingId = ?, lockToken = ?, sessionToken = COALESCE(?, sessionToken),
-        userEmail = COALESCE(?, userEmail), userName = COALESCE(?, userName), userMssv = COALESCE(?, userMssv)
+        userEmail = COALESCE(?, userEmail), userName = COALESCE(?, userName), userMssv = COALESCE(?, userMssv),
+        openCode = ?
        WHERE id = ?`, [
             session.quizTargetId, session.learningMode, session.startTime, session.recentLearningDateTime,
             session.shuffleQuestions ? 1 : 0, session.shuffleAnswers ? 1 : 0, session.currentIndex, session.studyTime,
             session.timeLimit ?? null, session.isCompleted ? 1 : 0, session.endTime ?? null, session.totalCorrect, session.totalWrong,
             session.identifyingId ?? null, session.lockToken ?? null, sessionToken,
             session.userEmail ?? null, session.userName ?? null, session.userMssv ?? null,
+            session.openCode ?? null,
             session.id
         ]);
         return session.id;
@@ -342,13 +357,14 @@ export async function saveSession(session) {
         quizTargetId, learningMode, startTime, recentLearningDateTime, 
         shuffleQuestions, shuffleAnswers, currentIndex, studyTime, 
         timeLimit, isCompleted, endTime, totalCorrect, totalWrong,
-        identifyingId, lockToken, sessionToken, userEmail, userName, userMssv
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+        identifyingId, lockToken, sessionToken, userEmail, userName, userMssv, openCode
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
             session.quizTargetId, session.learningMode, session.startTime, session.recentLearningDateTime,
             session.shuffleQuestions ? 1 : 0, session.shuffleAnswers ? 1 : 0, session.currentIndex, session.studyTime,
             session.timeLimit ?? null, session.isCompleted ? 1 : 0, session.endTime ?? null, session.totalCorrect, session.totalWrong,
             session.identifyingId ?? null, session.lockToken ?? null, finalToken,
-            session.userEmail ?? null, session.userName ?? null, session.userMssv ?? null
+            session.userEmail ?? null, session.userName ?? null, session.userMssv ?? null,
+            session.openCode ?? null
         ]);
         return result.lastID;
     }
@@ -445,18 +461,22 @@ export async function getConfig() {
             ...cfg,
             enableQuickAnswer: !!cfg.enableQuickAnswer,
             isMouseEnabled: !!cfg.isMouseEnabled,
-            keyBindings: JSON.parse(cfg.keyBindings)
+            keyBindings: JSON.parse(cfg.keyBindings),
+            examOpenCode: cfg.examOpenCode || '12345'
         };
     }
     return null;
 }
 export async function saveConfig(cfg) {
     await quizDb.run(`UPDATE config SET 
-      fontFamily = ?, fontSize = ?, enableQuickAnswer = ?, isMouseEnabled = ?, keyBindings = ?
+      fontFamily = ?, fontSize = ?, enableQuickAnswer = ?, isMouseEnabled = ?, keyBindings = ?, examOpenCode = ?
      WHERE id = 1`, [
         cfg.fontFamily, cfg.fontSize, cfg.enableQuickAnswer ? 1 : 0, cfg.isMouseEnabled ? 1 : 0,
-        JSON.stringify(cfg.keyBindings)
+        JSON.stringify(cfg.keyBindings), cfg.examOpenCode || '12345'
     ]);
+}
+export async function getQuizByName(name) {
+    return quizDb.get('SELECT * FROM quizzes WHERE LOWER(name) = LOWER(?)', [name]);
 }
 export async function wipeDatabase() {
     await userDb.run('DELETE FROM session_details');

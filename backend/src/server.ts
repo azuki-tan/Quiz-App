@@ -87,6 +87,100 @@ async function startServer() {
     // ─── AUTH ROUTES (no auth needed) ────────────────────────────────────────
     app.use('/api/auth', authRouter);
 
+    app.post('/api/auth/exam-login', async (req, res) => {
+      try {
+        const { examCode, userName } = req.body;
+        if (!examCode || !userName) {
+          return res.status(400).json({ error: 'Vui lòng điền đầy đủ thông tin Exam Code và User Name.' });
+        }
+
+        const trimmedExamCode = String(examCode).trim();
+        const trimmedUserName = String(userName).trim();
+
+        // 1. Find the quiz by name (case-insensitive) or by ID (if it's numeric)
+        let quiz = await db.getQuizByName(trimmedExamCode);
+        if (!quiz && !isNaN(Number(trimmedExamCode))) {
+          quiz = await db.getQuizById(Number(trimmedExamCode));
+        }
+
+        if (!quiz) {
+          return res.status(404).json({ error: 'Mã đề thi (Exam Code) không tồn tại trên hệ thống.' });
+        }
+
+        // Check if candidate is registered in the users table
+        const registeredUser = await db.getUserByEmailOrMssv(trimmedUserName);
+        if (!registeredUser) {
+          return res.status(403).json({ error: 'Thí sinh (User Name) không có tên trong danh sách đăng ký thi.' });
+        }
+
+        // 2. Check if there is an active exam session for this student and quiz
+        const sessions = await db.getSessions();
+        let activeSession = sessions.find(s => 
+          s.quizTargetId === quiz.id && 
+          (s.userMssv === registeredUser.mssv || s.userEmail === registeredUser.email) && 
+          s.learningMode === 'exam' && 
+          !s.isCompleted
+        );
+
+        if (activeSession) {
+          // If session exists, return its token
+          return res.json({ success: true, sessionToken: activeSession.sessionToken });
+        }
+
+        // 3. Create a new exam session
+        const questions = await db.getQuestionsByQuiz(quiz.id);
+        if (questions.length === 0) {
+          return res.status(400).json({ error: 'Đề thi này chưa có câu hỏi nào để bắt đầu.' });
+        }
+
+        // Fetch current examOpenCode from database settings
+        const config = await db.getConfig();
+        const currentOpenCode = config?.examOpenCode || '12345';
+
+        // Shuffle questions
+        const shuffledQuestions = [...questions].sort(() => Math.random() - 0.5);
+
+        const sessionData = {
+          quizTargetId: quiz.id,
+          learningMode: 'exam',
+          startTime: new Date().toISOString(),
+          recentLearningDateTime: new Date().toISOString(),
+          shuffleQuestions: true,
+          shuffleAnswers: true,
+          currentIndex: 0,
+          studyTime: 0,
+          timeLimit: 60 * 60, // Default to 60 minutes
+          isCompleted: false,
+          totalCorrect: 0,
+          totalWrong: 0,
+          userEmail: registeredUser.email,
+          userName: registeredUser.name,
+          userMssv: registeredUser.mssv || trimmedUserName,
+          openCode: currentOpenCode
+        };
+
+        const sessionId = await db.saveSession(sessionData);
+        const savedSession = await db.getSessionById(sessionId);
+
+        // Create details list
+        const detailsList = shuffledQuestions.map((q, idx) => ({
+          learningSessionId: sessionId,
+          questionTargetId: q.id,
+          isChecked: false,
+          isSeen: idx === 0,
+          isCorrect: null,
+          selectedAnswersList: []
+        }));
+
+        await db.saveSessionDetailsBatch(detailsList);
+
+        res.json({ success: true, sessionToken: savedSession?.sessionToken });
+      } catch (err: any) {
+        console.error('Exam login error:', err);
+        res.status(500).json({ error: err.message || 'Lỗi server khi xác thực phòng thi.' });
+      }
+    });
+
     // ─── USER MANAGEMENT (admin only) ────────────────────────────────────────
     app.get('/api/users', requireAuth, requireAdmin, async (req, res) => {
       try {

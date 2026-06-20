@@ -10,6 +10,7 @@ export const SettingPage: React.FC = () => {
   const [fontSize, setFontSize] = useState(config.fontSize);
   const [enableQuickAnswer, setEnableQuickAnswer] = useState(config.enableQuickAnswer);
   const [isMouseEnabled, setIsMouseEnabled] = useState(config.isMouseEnabled);
+  const [examOpenCode, setExamOpenCode] = useState(config.examOpenCode || '12345');
 
   const [apiToken, setApiToken] = useState('');
   const [showToken, setShowToken] = useState(false);
@@ -33,7 +34,8 @@ export const SettingPage: React.FC = () => {
       fontFamily,
       fontSize,
       enableQuickAnswer,
-      isMouseEnabled
+      isMouseEnabled,
+      examOpenCode
     });
     alert('Đã lưu cấu hình cài đặt thành công!');
   };
@@ -92,6 +94,21 @@ export const SettingPage: React.FC = () => {
               />
             </div>
           </div>
+        </div>
+
+        <div className="form-group" style={{ marginTop: '10px' }}>
+          <label className="form-label">Mã mở đề thi mặc định (Open Code)</label>
+          <input
+            type="text"
+            className="input"
+            value={examOpenCode}
+            onChange={(e) => setExamOpenCode(e.target.value)}
+            placeholder="Ví dụ: ABCDE"
+            style={{ maxWidth: '300px' }}
+          />
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+            Mã xác thực này sẽ được yêu cầu ở bước cuối cùng trước khi thí sinh bắt đầu làm bài thi trắc nghiệm.
+          </span>
         </div>
 
         <div className="flex flex-col gap-3 mt-2">
