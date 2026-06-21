@@ -16,6 +16,7 @@ import { LearningReviewPage } from './pages/LearningReviewPage';
 import { SettingPage } from './pages/SettingPage';
 import { HistoryPage } from './pages/HistoryPage';
 import { UsersPage } from './pages/UsersPage';
+import { ExamAdminPage } from './pages/ExamAdminPage';
 import './App.css';
 
 const AppContent: React.FC = () => {
@@ -60,7 +61,7 @@ const AppContent: React.FC = () => {
       }
 
       // Redirect non-admins away from admin-only pages to /learning
-      const adminOnlyRoutes = ['/dashboard', '/library', '/settings', '/users'];
+      const adminOnlyRoutes = ['/dashboard', '/library', '/settings', '/users', '/exam-admin'];
       if (!currentUser.isAdmin && adminOnlyRoutes.includes(location.pathname)) {
         navigate('/learning');
       }
@@ -147,6 +148,8 @@ const AppContent: React.FC = () => {
         return <HistoryPage />;
       case 'users':
         return isAdmin ? <UsersPage /> : <LearningPage />;
+      case 'exam-admin':
+        return isAdmin ? <ExamAdminPage /> : <LearningPage />;
       default:
         return isAdmin ? <DashboardPage /> : <LearningPage />;
     }

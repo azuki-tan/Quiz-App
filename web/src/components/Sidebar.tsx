@@ -12,6 +12,7 @@ import {
   Users,
   LogOut,
   ShieldCheck,
+  Calendar,
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
@@ -43,6 +44,14 @@ export const Sidebar: React.FC = () => {
       icon: <GraduationCap size={20} />,
       action: () => navigateTo({ type: 'learning' })
     },
+    ...(isAdmin ? [
+      {
+        id: 'exam-admin',
+        title: 'Exam',
+        icon: <Calendar size={20} />,
+        action: () => navigateTo({ type: 'exam-admin' })
+      }
+    ] : []),
     {
       id: 'history',
       title: 'Lịch sử thi',
@@ -69,6 +78,7 @@ export const Sidebar: React.FC = () => {
     if (id === 'dashboard' && activePage.type === 'dashboard') return true;
     if (id === 'library' && ['library', 'subject-detail', 'quiz-detail'].includes(activePage.type)) return true;
     if (id === 'learning' && activePage.type.startsWith('learning')) return true;
+    if (id === 'exam-admin' && activePage.type === 'exam-admin') return true;
     if (id === 'history' && activePage.type === 'history') return true;
     if (id === 'users' && activePage.type === 'users') return true;
     if (id === 'setting' && activePage.type === 'setting') return true;

@@ -14,7 +14,8 @@ export type ActivePage =
   | { type: 'learning-review'; sessionTokenOrId: string }
   | { type: 'setting' }
   | { type: 'history' }
-  | { type: 'users' };
+  | { type: 'users' }
+  | { type: 'exam-admin' };
 
 interface AppContextType {
   // Navigation
@@ -37,8 +38,8 @@ interface AppContextType {
   deleteSubject: (id: number) => Promise<void>;
 
   // Quiz Actions
-  createQuiz: (name: string, subjectId: number) => Promise<number>;
-  updateQuiz: (id: number, name: string, subjectId: number) => Promise<void>;
+  createQuiz: (name: string, subjectId: number, isExamOnly?: number) => Promise<number>;
+  updateQuiz: (id: number, name: string, subjectId: number, isExamOnly?: number) => Promise<void>;
   deleteQuiz: (id: number) => Promise<void>;
 
   // Question Actions
@@ -56,6 +57,12 @@ interface AppContextType {
   // Config Actions
   saveConfig: (config: AppConfig) => Promise<void>;
   resetAllData: () => Promise<void>;
+
+  // Exam Actions
+  exams: any[];
+  createExam: (exam: any) => Promise<number>;
+  updateExam: (exam: any) => Promise<void>;
+  deleteExam: (id: number) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -109,6 +116,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return '/history';
       case 'users':
         return '/users';
+      case 'exam-admin':
+        return '/exam-admin';
       default:
         return '/dashboard';
     }
@@ -148,6 +157,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (parts[0] === 'settings') return { type: 'setting' };
     if (parts[0] === 'history') return { type: 'history' };
     if (parts[0] === 'users') return { type: 'users' };
+    if (parts[0] === 'exam-admin') return { type: 'exam-admin' };
 
     return { type: 'dashboard' };
   };
@@ -164,6 +174,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [sessions, setSessions] = useState<LearningSession[]>([]);
+  const [exams, setExams] = useState<any[]>([]);
   const [config, setConfig] = useState<AppConfig>({
     id: 1,
     fontFamily: 'Microsoft Sans Serif',
@@ -355,6 +366,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Apply config styling variables
       document.documentElement.style.setProperty('--font-family', `"${cfg.fontFamily}", 'Segoe UI', Arial, sans-serif`);
       document.documentElement.style.setProperty('--font-size-base', `${cfg.fontSize}px`);
+
+      try {
+        const exList = await apiCall<any[]>('/exams');
+        setExams(exList);
+      } catch (exErr) {
+        console.log('Skipping exams fetch (non-admin or offline):', exErr);
+      }
     } catch (loadError) {
       console.error('Failed to load data from server:', loadError);
     }
@@ -416,6 +434,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       list.push({ label: 'Lịch sử thi cử', action: () => { } });
     } else if (activePage.type === 'users') {
       list.push({ label: 'Quản lý Người dùng', action: () => { } });
+    } else if (activePage.type === 'exam-admin') {
+      list.push({ label: 'Quản lý Kỳ thi', action: () => { } });
     }
 
     setBreadcrumbs(list);
@@ -446,19 +466,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await loadData();
   };
 
-  const createQuiz = async (name: string, subjectId: number) => {
+  const createQuiz = async (name: string, subjectId: number, isExamOnly?: number) => {
     const { id } = await apiCall<{ id: number }>('/quizzes', {
       method: 'POST',
-      body: JSON.stringify({ name, subjectTargetId: subjectId }),
+      body: JSON.stringify({ name, subjectTargetId: subjectId, isExamOnly }),
     });
     await loadData();
     return id;
   };
 
-  const updateQuiz = async (id: number, name: string, subjectId: number) => {
+  const updateQuiz = async (id: number, name: string, subjectId: number, isExamOnly?: number) => {
     await apiCall('/quizzes', {
       method: 'POST',
-      body: JSON.stringify({ id, name, subjectTargetId: subjectId }),
+      body: JSON.stringify({ id, name, subjectTargetId: subjectId, isExamOnly }),
     });
     await loadData();
   };
@@ -659,7 +679,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       deleteSession,
       getSessionWithDetails,
       saveConfig,
-      resetAllData
+      resetAllData,
+      exams,
+      createExam: async (exam: any) => {
+        const { id } = await apiCall<{ id: number }>('/exams', {
+          method: 'POST',
+          body: JSON.stringify(exam),
+        });
+        await loadData();
+        return id;
+      },
+      updateExam: async (exam: any) => {
+        await apiCall('/exams', {
+          method: 'POST',
+          body: JSON.stringify(exam),
+        });
+        await loadData();
+      },
+      deleteExam: async (id: number) => {
+        await apiCall(`/exams/${id}`, {
+          method: 'DELETE',
+        });
+        await loadData();
+      }
     }}>
       {children}
     </AppContext.Provider>

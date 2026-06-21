@@ -8,6 +8,7 @@ export interface Quiz {
   id: number;
   name: string;
   subjectTargetId: number;
+  isExamOnly?: number;
 }
 
 export interface Answer {
@@ -55,6 +56,10 @@ export interface LearningSession {
   subjectCode?: string;
   subjectName?: string;
   openCode?: string;
+  allowReview?: number;
+  showScore?: number;
+  isScheduledExam?: boolean;
+  examStarted?: number | boolean;
 }
 
 export interface LearningSessionDetail {
@@ -78,3 +83,19 @@ export interface AppConfig {
   keyBindings: Record<ShortcutAction, string[]>;
   examOpenCode?: string;
 }
+
+export interface Exam {
+  id?: number;
+  examCode: string;
+  quizTargetId: number;
+  useSeb: number; // 0 or 1
+  durationTime: number;
+  attemptsAllowed: number;
+  timeOpen: string;
+  timeEnd: string;
+  openCode?: string;
+  allowedUsers: string; // JSON string array
+  showScore: number; // 0 or 1
+  allowReview: number; // 0 or 1
+}
+

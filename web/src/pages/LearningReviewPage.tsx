@@ -186,7 +186,7 @@ export const LearningReviewPage: React.FC<LearningReviewPageProps> = ({ sessionI
                     }}>
                       Câu {originalIdx + 1}:
                     </span>
-                    <div style={{ display: 'inline-block' }} dangerouslySetInnerHTML={{ __html: cleanHtmlExplanation(q?.content) }} />
+                    <div style={{ display: 'inline-block', whiteSpace: 'pre-wrap' }} dangerouslySetInnerHTML={{ __html: cleanHtmlExplanation(q?.content) }} />
                   </div>
 
                   {/* Score Status Tag */}
@@ -260,7 +260,7 @@ export const LearningReviewPage: React.FC<LearningReviewPageProps> = ({ sessionI
                         >
                           {alphabet}
                         </div>
-                        <span className="flex-1">{ans.content}</span>
+                        <span className="flex-1" style={{ whiteSpace: 'pre-wrap' }}>{ans.content}</span>
 
                         {/* Checkmarks and Bạn chọn indicators */}
                         <div className="flex items-center gap-2" style={{ marginLeft: 'auto', flexShrink: 0 }}>
@@ -297,7 +297,7 @@ export const LearningReviewPage: React.FC<LearningReviewPageProps> = ({ sessionI
                     }}
                   >
                     <span style={{ fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Giải thích: </span>
-                    <div className="explanation-content" dangerouslySetInnerHTML={{ __html: cleanHtmlExplanation(q.explanation) }} />
+                    <div className="explanation-content" style={{ whiteSpace: 'pre-wrap' }} dangerouslySetInnerHTML={{ __html: cleanHtmlExplanation(q.explanation) }} />
                   </div>
                 )}
 

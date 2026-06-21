@@ -548,7 +548,7 @@ body {
   display: flex;
   flex-direction: column;
   padding: 1.75rem 2rem;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
   overflow-y: auto;
 }
@@ -557,6 +557,19 @@ body {
   transform: rotateY(180deg);
   background-color: #F8FAFC;
   border-color: rgba(1, 117, 194, 0.2);
+}
+
+.flashcard-front::before,
+.flashcard-front::after,
+.flashcard-back::before,
+.flashcard-back::after {
+  content: "";
+  display: block;
+  flex-grow: 1;
+  flex-shrink: 1;
+  height: 0;
+  min-height: 0;
+  pointer-events: none;
 }
 
 /* Layout & Sizing Utilities */

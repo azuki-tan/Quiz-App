@@ -2027,223 +2027,242 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
           <div className="flex flex-col gap-4">
             {session.learningMode === 'study' ? (
               /* Flashcard Mode (Quizlet style) */
-              <div className="flex flex-col items-center justify-between h-full w-full gap-6">
-                <div
-                  className={`flashcard-container ${isFlipped ? 'is-flipped' : ''}`}
-                  onClick={() => setIsFlipped(!isFlipped)}
-                  style={{ cursor: 'pointer', width: '100%', maxWidth: '900px', height: 'calc(100vh - 270px)', maxHeight: '560px', minHeight: '320px' }}
-                >
-                  <div className="flashcard-inner">
-                    {/* Front Side: Question content & Choices list */}
-                    <div className="flashcard-front">
-                      <div style={{ fontSize: '1.35rem', fontWeight: 700, lineHeight: 1.5, textAlign: 'center', marginBottom: '20px', color: 'var(--text-primary)' }}>
-                        <div dangerouslySetInnerHTML={{ __html: cleanHtmlExplanation(currentQuestion?.content) }} />
-                      </div>
+              (() => {
+                const contentCharCount = currentQuestion?.content?.length || 0;
+                const choicesTotalLength = currentAnswers.reduce((acc, a) => acc + (a.content?.length || 0), 0);
+                const isQuestionLong = contentCharCount > 150 || choicesTotalLength > 150;
+                const isQuestionVeryLong = contentCharCount > 350 || choicesTotalLength > 300;
+                
+                const questionFontSize = isQuestionVeryLong ? '1.0rem' : isQuestionLong ? '1.15rem' : '1.35rem';
+                const choicesFontSize = isQuestionVeryLong ? '0.85rem' : isQuestionLong ? '0.92rem' : '1rem';
+                const choicesPadding = isQuestionVeryLong ? '8px 12px' : isQuestionLong ? '10px 14px' : '12px 16px';
+                const choicesGap = isQuestionVeryLong ? '6px' : isQuestionLong ? '8px' : '10px';
+                const flashcardPadding = isQuestionVeryLong ? '1.25rem 1.5rem' : '1.75rem 2rem';
 
-                      {/* Question image */}
-                      {currentQuestion?.imageUrl && (
-                        <img
-                          src={currentQuestion.imageUrl}
-                          alt="Hình ảnh câu hỏi"
-                          style={{ maxWidth: '100%', maxHeight: '220px', objectFit: 'contain', borderRadius: '8px', marginBottom: '12px', border: '1px solid var(--border-color)' }}
-                        />
-                      )}
-
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', maxWidth: '600px', marginTop: '16px' }}>
-                        {currentAnswers.map((ans, idx) => {
-                          const alphabet = String.fromCharCode(65 + idx);
-                          return (
-                            <div
-                              key={ans.id}
-                              style={{
-                                padding: '12px 16px',
-                                borderRadius: '8px',
-                                border: '1px solid var(--border-color)',
-                                backgroundColor: '#F8FAFC',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '12px',
-                                textAlign: 'left',
-                                width: '100%',
-                                fontSize: '1rem',
-                                fontWeight: 500,
-                                color: 'var(--text-primary)',
-                              }}
-                            >
-                              <div
-                                style={{
-                                  width: '28px',
-                                  height: '28px',
-                                  borderRadius: '50%',
-                                  backgroundColor: '#E2E8F0',
-                                  color: 'var(--text-secondary)',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  fontWeight: 700,
-                                  fontSize: '0.85rem',
-                                  flexShrink: 0
-                                }}
-                              >
-                                {alphabet}
-                              </div>
-                              <span>{ans.content}</span>
+                return (
+                  <div className="flex flex-col items-center justify-between h-full w-full gap-6">
+                    <div
+                      className={`flashcard-container ${isFlipped ? 'is-flipped' : ''}`}
+                      onClick={() => setIsFlipped(!isFlipped)}
+                      style={{ cursor: 'pointer', width: '100%', maxWidth: '900px', height: 'calc(100vh - 270px)', maxHeight: '720px', minHeight: '380px' }}
+                    >
+                      <div className="flashcard-inner">
+                        {/* Front Side: Question content & Choices list */}
+                        <div className="flashcard-front" style={{ padding: flashcardPadding, overflowY: 'auto' }}>
+                          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
+                            <div style={{ fontSize: questionFontSize, fontWeight: 700, lineHeight: 1.5, textAlign: 'center', marginBottom: '20px', color: 'var(--text-primary)' }}>
+                              <div style={{ whiteSpace: 'pre-wrap' }} dangerouslySetInnerHTML={{ __html: cleanHtmlExplanation(currentQuestion?.content) }} />
                             </div>
-                          );
-                        })}
-                      </div>
 
-                      <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: 'auto', paddingTop: '20px' }}>
-                        👆 Bấm bất kỳ đâu trên thẻ hoặc nhấn Space để lật qua lật lại
-                      </div>
-                    </div>
+                            {/* Question image */}
+                            {currentQuestion?.imageUrl && (
+                              <img
+                                src={currentQuestion.imageUrl}
+                                alt="Hình ảnh câu hỏi"
+                                style={{ maxWidth: '100%', maxHeight: isQuestionVeryLong ? '140px' : isQuestionLong ? '180px' : '220px', objectFit: 'contain', borderRadius: '8px', marginBottom: '12px', border: '1px solid var(--border-color)' }}
+                              />
+                            )}
 
-                    {/* Back Side: Correct answer text/letter */}
-                    <div className="flashcard-back">
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px', flex: 1, padding: '24px', width: '100%' }}>
-                        <div style={{ fontSize: '1.25rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Đáp án đúng</div>
-                        
-                        {/* Display the correct answers explicitly */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', maxWidth: '600px' }}>
-                          {currentAnswers.map((ans, idx) => {
-                            if (!ans.isCorrect) return null;
-                            const alphabet = String.fromCharCode(65 + idx);
-                            return (
-                              <div
-                                key={ans.id}
-                                style={{
-                                  padding: '12px 16px',
-                                  borderRadius: '8px',
-                                  border: '2px solid #22c55e',
-                                  backgroundColor: 'rgba(34, 197, 94, 0.05)',
-                                  color: '#16a34a',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '12px',
-                                  textAlign: 'left',
-                                  width: '100%',
-                                  fontSize: '1.1rem',
-                                  fontWeight: 700,
-                                }}
-                              >
-                                <div
-                                  style={{
-                                    width: '28px',
-                                    height: '28px',
-                                    borderRadius: '50%',
-                                    backgroundColor: '#22c55e',
-                                    color: 'white',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    fontWeight: 700,
-                                    fontSize: '0.85rem',
-                                    flexShrink: 0
-                                  }}
-                                >
-                                  {alphabet}
-                                </div>
-                                <span>{ans.content}</span>
-                              </div>
-                            );
-                          })}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: choicesGap, width: '100%', maxWidth: '600px', marginTop: '16px' }}>
+                              {currentAnswers.map((ans, idx) => {
+                                const alphabet = String.fromCharCode(65 + idx);
+                                return (
+                                  <div
+                                    key={ans.id}
+                                    style={{
+                                      padding: choicesPadding,
+                                      borderRadius: '8px',
+                                      border: '1px solid var(--border-color)',
+                                      backgroundColor: '#F8FAFC',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '12px',
+                                      textAlign: 'left',
+                                      width: '100%',
+                                      fontSize: choicesFontSize,
+                                      fontWeight: 500,
+                                      color: 'var(--text-primary)',
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        width: isQuestionVeryLong ? '24px' : '28px',
+                                        height: isQuestionVeryLong ? '24px' : '28px',
+                                        borderRadius: '50%',
+                                        backgroundColor: '#E2E8F0',
+                                        color: 'var(--text-secondary)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontWeight: 700,
+                                        fontSize: isQuestionVeryLong ? '0.75rem' : '0.85rem',
+                                        flexShrink: 0
+                                      }}
+                                    >
+                                      {alphabet}
+                                    </div>
+                                    <span style={{ whiteSpace: 'pre-wrap' }}>{ans.content}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: 'auto', paddingTop: '20px' }}>
+                              👆 Bấm bất kỳ đâu trên thẻ hoặc nhấn Space để lật qua lật lại
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Back Side: Correct answer text/letter */}
+                        <div className="flashcard-back" style={{ padding: flashcardPadding, overflowY: 'auto' }}>
+                          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
+                            <div style={{ fontSize: '1.25rem', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '16px' }}>Đáp án đúng</div>
+                            
+                            {/* Display the correct answers explicitly */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: choicesGap, width: '100%', maxWidth: '600px' }}>
+                              {currentAnswers.map((ans, idx) => {
+                                if (!ans.isCorrect) return null;
+                                const alphabet = String.fromCharCode(65 + idx);
+                                return (
+                                  <div
+                                    key={ans.id}
+                                    style={{
+                                      padding: choicesPadding,
+                                      borderRadius: '8px',
+                                      border: '2px solid #22c55e',
+                                      backgroundColor: 'rgba(34, 197, 94, 0.05)',
+                                      color: '#16a34a',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '12px',
+                                      textAlign: 'left',
+                                      width: '100%',
+                                      fontSize: choicesFontSize,
+                                      fontWeight: 700,
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        width: isQuestionVeryLong ? '24px' : '28px',
+                                        height: isQuestionVeryLong ? '24px' : '28px',
+                                        borderRadius: '50%',
+                                        backgroundColor: '#22c55e',
+                                        color: 'white',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontWeight: 700,
+                                        fontSize: isQuestionVeryLong ? '0.75rem' : '0.85rem',
+                                        flexShrink: 0
+                                      }}
+                                    >
+                                      {alphabet}
+                                    </div>
+                                    <span style={{ whiteSpace: 'pre-wrap' }}>{ans.content}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            
+                            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: 'auto', paddingTop: '20px' }}>
+                              👆 Bấm bất kỳ đâu trên thẻ hoặc nhấn Space để lật qua lật lại
+                            </div>
+                          </div>
                         </div>
                       </div>
-                      <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: 'auto', paddingBottom: '20px' }}>
-                        👆 Bấm bất kỳ đâu trên thẻ hoặc nhấn Space để lật qua lật lại
+                    </div>
+
+                    {/* Fixed controls under/below the flashcard */}
+                    <div style={{ 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      alignItems: 'center', 
+                      gap: '10px', 
+                      width: '100%', 
+                      maxWidth: '500px', 
+                      flexShrink: 0,
+                      paddingBottom: '16px'
+                    }}>
+                      <div style={{ display: 'flex', gap: '16px', width: '100%' }}>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleStillLearning(); }}
+                          style={{
+                            flex: 1,
+                            padding: '12px 20px',
+                            borderRadius: '12px',
+                            border: '1px solid #ef4444',
+                            backgroundColor: 'rgba(239, 68, 68, 0.05)',
+                            color: '#dc2626',
+                            fontWeight: 700,
+                            fontSize: '1rem',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '8px',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)'}
+                          onMouseLeave={e => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.05)'}
+                        >
+                          ← Đang Học
+                        </button>
+
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setShowExplanationPopup(true); }}
+                          style={{
+                            flex: 1,
+                            padding: '12px 20px',
+                            borderRadius: '12px',
+                            border: '1px solid #3b82f6',
+                            backgroundColor: showExplanationPopup ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.05)',
+                            color: '#2563eb',
+                            fontWeight: 700,
+                            fontSize: '1rem',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '8px',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.1)'}
+                          onMouseLeave={e => e.currentTarget.style.backgroundColor = showExplanationPopup ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.05)'}
+                        >
+                          💡 Lời giải (C)
+                        </button>
+
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleKnown(); }}
+                          style={{
+                            flex: 1,
+                            padding: '12px 20px',
+                            borderRadius: '12px',
+                            border: '1px solid #22c55e',
+                            backgroundColor: 'rgba(34, 197, 94, 0.05)',
+                            color: '#16a34a',
+                            fontWeight: 700,
+                            fontSize: '1rem',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '8px',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(34, 197, 94, 0.1)'}
+                          onMouseLeave={e => e.currentTarget.style.backgroundColor = 'rgba(34, 197, 94, 0.05)'}
+                        >
+                          Đã biết →
+                        </button>
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
+                        Phím tắt: <strong>←</strong> (Đang học), <strong>→</strong> (Đã biết), <strong>C</strong> (Lời giải), <strong>Space</strong> (Lật thẻ)
                       </div>
                     </div>
                   </div>
-                </div>
-
-                {/* Fixed controls under/below the flashcard */}
-                <div style={{ 
-                  display: 'flex', 
-                  flexDirection: 'column', 
-                  alignItems: 'center', 
-                  gap: '10px', 
-                  width: '100%', 
-                  maxWidth: '500px', 
-                  flexShrink: 0,
-                  paddingBottom: '16px'
-                }}>
-                  <div style={{ display: 'flex', gap: '16px', width: '100%' }}>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleStillLearning(); }}
-                      style={{
-                        flex: 1,
-                        padding: '12px 20px',
-                        borderRadius: '12px',
-                        border: '1px solid #ef4444',
-                        backgroundColor: 'rgba(239, 68, 68, 0.05)',
-                        color: '#dc2626',
-                        fontWeight: 700,
-                        fontSize: '1rem',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '8px',
-                        transition: 'all 0.2s'
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)'}
-                      onMouseLeave={e => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.05)'}
-                    >
-                      ← Đang Học
-                    </button>
-
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setShowExplanationPopup(!showExplanationPopup); }}
-                      style={{
-                        padding: '12px 20px',
-                        borderRadius: '12px',
-                        border: '1px solid #3b82f6',
-                        backgroundColor: showExplanationPopup ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.05)',
-                        color: '#2563eb',
-                        fontWeight: 700,
-                        fontSize: '1rem',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '8px',
-                        transition: 'all 0.2s'
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.1)'}
-                      onMouseLeave={e => e.currentTarget.style.backgroundColor = showExplanationPopup ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.05)'}
-                    >
-                      💡 Lời giải (C)
-                    </button>
-
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleKnown(); }}
-                      style={{
-                        flex: 1,
-                        padding: '12px 20px',
-                        borderRadius: '12px',
-                        border: '1px solid #22c55e',
-                        backgroundColor: 'rgba(34, 197, 94, 0.05)',
-                        color: '#16a34a',
-                        fontWeight: 700,
-                        fontSize: '1rem',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '8px',
-                        transition: 'all 0.2s'
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(34, 197, 94, 0.1)'}
-                      onMouseLeave={e => e.currentTarget.style.backgroundColor = 'rgba(34, 197, 94, 0.05)'}
-                    >
-                      Đã biết →
-                    </button>
-                  </div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
-                    Phím tắt: <strong>←</strong> (Đang học), <strong>→</strong> (Đã biết), <strong>C</strong> (Lời giải), <strong>Space</strong> (Lật thẻ)
-                  </div>
-                </div>
-              </div>
+                );
+              })()
             ) : (
               /* Practice / Exam mode normal question content & choices */
               <>

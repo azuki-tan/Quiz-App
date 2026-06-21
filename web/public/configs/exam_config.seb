@@ -3,7 +3,7 @@
 <plist version="1.0">
   <dict>
     <key>startURL</key>
-    <string>https://seb.myazuki.net</string>
+    <string>https://exam.myazuki.net</string>
     <key>startURLAppendQueryParameter</key>
     <true />
     <key>sendBrowserExamKey</key>

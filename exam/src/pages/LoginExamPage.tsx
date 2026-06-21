@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { GraduationCap, AlertCircle, Volume2, Type } from 'lucide-react';
+import { GraduationCap, AlertCircle, Volume2, Type, Shield } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export const LoginExamPage: React.FC = () => {
@@ -59,25 +59,13 @@ export const LoginExamPage: React.FC = () => {
 
   const playBeep = () => {
     try {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioCtx) {
-        alert('Trình duyệt không hỗ trợ Web Audio API.');
-        return;
-      }
-      const context = new AudioCtx();
-      const oscillator = context.createOscillator();
-      const gainNode = context.createGain();
-
-      oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(440, context.currentTime); // 440 Hz (A4)
-      gainNode.gain.setValueAtTime(0.15, context.currentTime);
-
-      oscillator.connect(gainNode);
-      gainNode.connect(context.destination);
-
-      oscillator.start();
-      oscillator.stop(context.currentTime + 0.8);
-      alert('Đã phát âm thanh kiểm tra (Beep). Hãy xác nhận loa đang hoạt động.');
+      const audio = new Audio('/ghosts.mp3');
+      audio.play().then(() => {
+        alert('Đang phát âm thanh kiểm tra (ghosts.mp3). Hãy xác nhận loa đang hoạt động.');
+      }).catch(err => {
+        console.error('Audio play failed:', err);
+        alert('Không thể phát âm thanh: ' + err.message);
+      });
     } catch (err) {
       console.error('Error playing beep:', err);
     }
@@ -321,7 +309,7 @@ export const LoginExamPage: React.FC = () => {
           <div style={{
             display: 'flex',
             justifyContent: 'center',
-            gap: '24px',
+            gap: '16px',
             fontSize: '0.85rem'
           }}>
             <button
@@ -340,7 +328,7 @@ export const LoginExamPage: React.FC = () => {
               }}
             >
               <Volume2 size={14} />
-              Check sound (7 secs)
+              Check sound
             </button>
             <button
               type="button"
@@ -360,6 +348,21 @@ export const LoginExamPage: React.FC = () => {
               <Type size={14} />
               Check font
             </button>
+            <a
+              href={`${window.location.protocol === 'https:' ? 'sebs://' : 'seb://'}${window.location.host}/api/config/seb`}
+              style={{
+                color: '#2563eb',
+                textDecoration: 'underline',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontWeight: 500
+              }}
+            >
+              <Shield size={14} />
+              :Run SEB
+            </a>
           </div>
 
           {/* Info status text */}

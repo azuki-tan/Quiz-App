@@ -6,8 +6,10 @@ import crypto from 'crypto';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dbPath = process.env.DB_PATH || path.resolve(__dirname, '../quiz.db');
 const userDbPath = process.env.USER_DB_PATH || path.resolve(path.dirname(dbPath), 'user_data.db');
+const examDbPath = process.env.EXAM_DB_PATH || path.resolve(path.dirname(dbPath), 'exam_data.db');
 export let quizDb;
 export let userDb;
+export let examDb;
 export async function initDb() {
     // Connect to Static Quiz Database
     quizDb = await open({
@@ -21,6 +23,29 @@ export async function initDb() {
         driver: sqlite3.Database
     });
     await userDb.run('PRAGMA foreign_keys = ON');
+    // Connect to Exam Configuration Database
+    examDb = await open({
+        filename: examDbPath,
+        driver: sqlite3.Database
+    });
+    await examDb.run('PRAGMA foreign_keys = ON');
+    // Create exams table in examDb
+    await examDb.exec(`
+    CREATE TABLE IF NOT EXISTS exams (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      examCode TEXT NOT NULL UNIQUE,
+      quizTargetId INTEGER NOT NULL,
+      useSeb INTEGER NOT NULL DEFAULT 0,
+      durationTime INTEGER NOT NULL DEFAULT 60,
+      attemptsAllowed INTEGER NOT NULL DEFAULT 1,
+      timeOpen TEXT NOT NULL,
+      timeEnd TEXT NOT NULL,
+      openCode TEXT NOT NULL,
+      allowedUsers TEXT NOT NULL,
+      showScore INTEGER NOT NULL DEFAULT 1,
+      allowReview INTEGER NOT NULL DEFAULT 1
+    );
+  `);
     // Create static tables in quizDb
     await quizDb.exec(`
     CREATE TABLE IF NOT EXISTS subjects (
@@ -95,7 +120,8 @@ export async function initDb() {
       userEmail TEXT,
       userName TEXT,
       userMssv TEXT,
-      openCode TEXT
+      openCode TEXT,
+      examStarted INTEGER DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS session_details (
@@ -209,14 +235,24 @@ export async function initDb() {
     if (!sessionCols.includes('openCode')) {
         await userDb.run('ALTER TABLE sessions ADD COLUMN openCode TEXT');
     }
+    if (!sessionCols.includes('examStarted')) {
+        await userDb.run('ALTER TABLE sessions ADD COLUMN examStarted INTEGER DEFAULT 0');
+    }
     const configPragma = await quizDb.all('PRAGMA table_info(config)');
     const configCols = configPragma.map((c) => c.name);
     if (!configCols.includes('examOpenCode')) {
         await quizDb.run("ALTER TABLE config ADD COLUMN examOpenCode TEXT DEFAULT '12345'");
     }
+    // Quizzes table migration: add isExamOnly if not exists
+    const quizzesPragma = await quizDb.all('PRAGMA table_info(quizzes)');
+    const quizzesCols = quizzesPragma.map((c) => c.name);
+    if (!quizzesCols.includes('isExamOnly')) {
+        await quizDb.run('ALTER TABLE quizzes ADD COLUMN isExamOnly INTEGER DEFAULT 0');
+    }
     console.log('SQLite Databases initialized successfully.');
     console.log('  - Static quiz database at:', dbPath);
     console.log('  - User progress database at:', userDbPath);
+    console.log('  - Exam configuration database at:', examDbPath);
 }
 // --- SUBJECTS CRUD ---
 export async function getSubjects() {
@@ -252,11 +288,12 @@ export async function getQuizWithSubjectInfo(id) {
 }
 export async function saveQuiz(quiz) {
     if (quiz.id) {
-        await quizDb.run('UPDATE quizzes SET name = ?, subjectTargetId = ? WHERE id = ?', [quiz.name, quiz.subjectTargetId, quiz.id]);
+        await quizDb.run('UPDATE quizzes SET name = ?, subjectTargetId = ?, isExamOnly = ? WHERE id = ?', [quiz.name, quiz.subjectTargetId, quiz.isExamOnly ?? 0, quiz.id]);
         return quiz.id;
     }
     else {
-        const result = await quizDb.run('INSERT INTO quizzes (name, subjectTargetId) VALUES (?, ?)', [quiz.name, quiz.subjectTargetId]);
+        const isExamOnlyVal = quiz.isExamOnly ?? 0;
+        const result = await quizDb.run('INSERT INTO quizzes (name, subjectTargetId, isExamOnly) VALUES (?, ?, ?)', [quiz.name, quiz.subjectTargetId, isExamOnlyVal]);
         return result.lastID;
     }
 }
@@ -315,7 +352,8 @@ export async function getSessions(userEmail) {
         ...s,
         shuffleQuestions: !!s.shuffleQuestions,
         shuffleAnswers: !!s.shuffleAnswers,
-        isCompleted: !!s.isCompleted
+        isCompleted: !!s.isCompleted,
+        examStarted: !!s.examStarted
     }));
 }
 export async function getSessionById(id) {
@@ -325,7 +363,8 @@ export async function getSessionById(id) {
             ...s,
             shuffleQuestions: !!s.shuffleQuestions,
             shuffleAnswers: !!s.shuffleAnswers,
-            isCompleted: !!s.isCompleted
+            isCompleted: !!s.isCompleted,
+            examStarted: !!s.examStarted
         };
     }
     return null;
@@ -339,14 +378,14 @@ export async function saveSession(session) {
         timeLimit = ?, isCompleted = ?, endTime = ?, totalCorrect = ?, totalWrong = ?,
         identifyingId = ?, lockToken = ?, sessionToken = COALESCE(?, sessionToken),
         userEmail = COALESCE(?, userEmail), userName = COALESCE(?, userName), userMssv = COALESCE(?, userMssv),
-        openCode = ?
+        openCode = ?, examStarted = ?
        WHERE id = ?`, [
             session.quizTargetId, session.learningMode, session.startTime, session.recentLearningDateTime,
             session.shuffleQuestions ? 1 : 0, session.shuffleAnswers ? 1 : 0, session.currentIndex, session.studyTime,
             session.timeLimit ?? null, session.isCompleted ? 1 : 0, session.endTime ?? null, session.totalCorrect, session.totalWrong,
             session.identifyingId ?? null, session.lockToken ?? null, sessionToken,
             session.userEmail ?? null, session.userName ?? null, session.userMssv ?? null,
-            session.openCode ?? null,
+            session.openCode ?? null, session.examStarted ? 1 : 0,
             session.id
         ]);
         return session.id;
@@ -357,14 +396,14 @@ export async function saveSession(session) {
         quizTargetId, learningMode, startTime, recentLearningDateTime, 
         shuffleQuestions, shuffleAnswers, currentIndex, studyTime, 
         timeLimit, isCompleted, endTime, totalCorrect, totalWrong,
-        identifyingId, lockToken, sessionToken, userEmail, userName, userMssv, openCode
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+        identifyingId, lockToken, sessionToken, userEmail, userName, userMssv, openCode, examStarted
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
             session.quizTargetId, session.learningMode, session.startTime, session.recentLearningDateTime,
             session.shuffleQuestions ? 1 : 0, session.shuffleAnswers ? 1 : 0, session.currentIndex, session.studyTime,
             session.timeLimit ?? null, session.isCompleted ? 1 : 0, session.endTime ?? null, session.totalCorrect, session.totalWrong,
             session.identifyingId ?? null, session.lockToken ?? null, finalToken,
             session.userEmail ?? null, session.userName ?? null, session.userMssv ?? null,
-            session.openCode ?? null
+            session.openCode ?? null, session.examStarted ? 1 : 0
         ]);
         return result.lastID;
     }
@@ -402,6 +441,7 @@ export async function getSessionByIdOrToken(idOrToken) {
             shuffleQuestions: !!s.shuffleQuestions,
             shuffleAnswers: !!s.shuffleAnswers,
             isCompleted: !!s.isCompleted,
+            examStarted: !!s.examStarted,
             quizName,
             subjectCode,
             subjectName
@@ -485,6 +525,9 @@ export async function wipeDatabase() {
     await quizDb.run('DELETE FROM questions');
     await quizDb.run('DELETE FROM quizzes');
     await quizDb.run('DELETE FROM subjects');
+    if (examDb) {
+        await examDb.run('DELETE FROM exams');
+    }
 }
 // --- USERS CRUD ---
 export async function getUsers() {
@@ -492,6 +535,10 @@ export async function getUsers() {
 }
 export async function getUserByEmail(email) {
     return userDb.get('SELECT * FROM users WHERE email = ? AND is_active = 1', [email]);
+}
+export async function getUserByEmailOrMssv(username) {
+    const clean = username.toLowerCase().trim();
+    return userDb.get('SELECT * FROM users WHERE (LOWER(email) = ? OR LOWER(mssv) = ?) AND is_active = 1', [clean, clean]);
 }
 export async function createUser(user) {
     const result = await userDb.run('INSERT INTO users (email, name, mssv, is_active, created_at) VALUES (?, ?, ?, 1, ?)', [user.email.toLowerCase().trim(), user.name, user.mssv, new Date().toISOString()]);
@@ -502,4 +549,53 @@ export async function deleteUser(id) {
 }
 export async function updateUser(id, user) {
     await userDb.run('UPDATE users SET email = ?, name = ?, mssv = ? WHERE id = ?', [user.email.toLowerCase().trim(), user.name, user.mssv, id]);
+}
+// --- EXAMS CRUD ---
+export async function getExams() {
+    return examDb.all('SELECT * FROM exams ORDER BY id DESC');
+}
+export async function getExamById(id) {
+    return examDb.get('SELECT * FROM exams WHERE id = ?', [id]);
+}
+export async function getExamByCode(code) {
+    return examDb.get('SELECT * FROM exams WHERE LOWER(examCode) = LOWER(?)', [code.trim()]);
+}
+export async function saveExam(exam) {
+    const code = exam.examCode.trim();
+    let openCode = exam.openCode;
+    if (exam.id) {
+        const existing = await examDb.get('SELECT openCode FROM exams WHERE id = ?', [exam.id]);
+        if (!openCode || openCode.trim() === '') {
+            openCode = existing ? existing.openCode : String(Math.floor(100 + Math.random() * 900));
+        }
+    }
+    else {
+        if (!openCode || openCode.trim() === '') {
+            openCode = String(Math.floor(100 + Math.random() * 900));
+        }
+    }
+    if (exam.id) {
+        await examDb.run(`UPDATE exams SET 
+        examCode = ?, quizTargetId = ?, useSeb = ?, durationTime = ?, attemptsAllowed = ?, 
+        timeOpen = ?, timeEnd = ?, openCode = ?, allowedUsers = ?, showScore = ?, allowReview = ?
+       WHERE id = ?`, [
+            code, exam.quizTargetId, exam.useSeb, exam.durationTime, exam.attemptsAllowed,
+            exam.timeOpen, exam.timeEnd, openCode, exam.allowedUsers, exam.showScore, exam.allowReview,
+            exam.id
+        ]);
+        return exam.id;
+    }
+    else {
+        const result = await examDb.run(`INSERT INTO exams (
+        examCode, quizTargetId, useSeb, durationTime, attemptsAllowed, 
+        timeOpen, timeEnd, openCode, allowedUsers, showScore, allowReview
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+            code, exam.quizTargetId, exam.useSeb, exam.durationTime, exam.attemptsAllowed,
+            exam.timeOpen, exam.timeEnd, openCode, exam.allowedUsers, exam.showScore, exam.allowReview
+        ]);
+        return result.lastID;
+    }
+}
+export async function deleteExam(id) {
+    await examDb.run('DELETE FROM exams WHERE id = ?', [id]);
 }

@@ -547,7 +547,7 @@ export const QuizDetailPage: React.FC<QuizDetailPageProps> = ({ quizId }) => {
                 <div className="flex justify-between items-start gap-4">
                   <div className="flex-1" style={{ fontWeight: 600, fontSize: '1.05rem', lineHeight: 1.4 }}>
                     <span style={{ color: 'var(--primary-color)', marginRight: '6px' }}>Câu {displayIndex}:</span>
-                    <span dangerouslySetInnerHTML={{ __html: cleanHtmlExplanation(q.content) }} />
+                    <span style={{ whiteSpace: 'pre-wrap' }} dangerouslySetInnerHTML={{ __html: cleanHtmlExplanation(q.content) }} />
                   </div>
                   
                   {/* Edit/Delete actions */}
@@ -600,7 +600,7 @@ export const QuizDetailPage: React.FC<QuizDetailPageProps> = ({ quizId }) => {
                         <span style={{ fontWeight: 600, color: ans.isCorrect ? 'var(--toast-success)' : 'var(--text-secondary)' }}>
                           {alphabet}.
                         </span>
-                        <span style={{ fontSize: '0.9rem', color: ans.isCorrect ? 'var(--toast-success)' : 'var(--text-primary)' }}>
+                        <span style={{ fontSize: '0.9rem', color: ans.isCorrect ? 'var(--toast-success)' : 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>
                           {ans.content}
                         </span>
                       </div>
@@ -621,7 +621,7 @@ export const QuizDetailPage: React.FC<QuizDetailPageProps> = ({ quizId }) => {
                     }}
                   >
                     <span style={{ fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Giải thích: </span>
-                    <div className="explanation-content" dangerouslySetInnerHTML={{ __html: cleanHtmlExplanation(q.explanation) }} />
+                    <div className="explanation-content" style={{ whiteSpace: 'pre-wrap' }} dangerouslySetInnerHTML={{ __html: cleanHtmlExplanation(q.explanation) }} />
                     {q.explanationImage && (
                       <img
                         src={q.explanationImage}

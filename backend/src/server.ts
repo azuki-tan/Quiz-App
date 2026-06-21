@@ -87,6 +87,44 @@ async function startServer() {
     // ─── AUTH ROUTES (no auth needed) ────────────────────────────────────────
     app.use('/api/auth', authRouter);
 
+    // ─── EXAMS MANAGEMENT (admin only) ───────────────────────────────────────
+    app.get('/api/exams', requireAuth, requireAdmin, async (req, res) => {
+      try {
+        const exams = await db.getExams();
+        const now = new Date();
+        const processed = exams.map(e => {
+          const openTime = new Date(e.timeOpen);
+          const endTime = new Date(e.timeEnd);
+          if (now < openTime || now > endTime) {
+            return { ...e, openCode: '' };
+          }
+          return e;
+        });
+        res.json(processed);
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.post('/api/exams', requireAuth, requireAdmin, async (req, res) => {
+      try {
+        const id = await db.saveExam(req.body);
+        res.json({ id });
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.delete('/api/exams/:id', requireAuth, requireAdmin, async (req, res) => {
+      try {
+        await db.deleteExam(Number(req.params.id));
+        res.json({ success: true });
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // ─── EXAMS AUTH LOGIN (no auth needed) ───────────────────────────────────
     app.post('/api/auth/exam-login', async (req, res) => {
       try {
         const { examCode, userName } = req.body;
@@ -97,66 +135,122 @@ async function startServer() {
         const trimmedExamCode = String(examCode).trim();
         const trimmedUserName = String(userName).trim();
 
-        // 1. Find the quiz by name (case-insensitive) or by ID (if it's numeric)
-        let quiz = await db.getQuizByName(trimmedExamCode);
-        if (!quiz && !isNaN(Number(trimmedExamCode))) {
-          quiz = await db.getQuizById(Number(trimmedExamCode));
+        // 1. Find the scheduled exam by examCode
+        const exam = await db.getExamByCode(trimmedExamCode);
+        if (!exam) {
+          return res.status(404).json({ error: 'Exam Code not Available' });
         }
 
-        if (!quiz) {
-          return res.status(404).json({ error: 'Mã đề thi (Exam Code) không tồn tại trên hệ thống.' });
+        // 2. Validate current time vs timeOpen & timeEnd
+        const now = new Date();
+        const openTime = new Date(exam.timeOpen);
+        const endTime = new Date(exam.timeEnd);
+
+        if (now < openTime) {
+          return res.status(403).json({ error: 'Exam Code not Available' });
+        }
+        if (now > endTime) {
+          return res.status(403).json({ error: 'Exam Code not Available' });
         }
 
-        // Check if candidate is registered in the users table
+        // 3. Find candidate user profile in registered users db
         const registeredUser = await db.getUserByEmailOrMssv(trimmedUserName);
         if (!registeredUser) {
           return res.status(403).json({ error: 'Thí sinh (User Name) không có tên trong danh sách đăng ký thi.' });
         }
 
-        // 2. Check if there is an active exam session for this student and quiz
+        // 4. Validate allowed candidates list
+        let allowed = [];
+        try {
+          allowed = JSON.parse(exam.allowedUsers) || [];
+        } catch (e) {
+          console.error('Failed to parse allowedUsers JSON:', e);
+        }
+
+        const userEmailLower = registeredUser.email.toLowerCase().trim();
+        const userMssvLower = registeredUser.mssv.toLowerCase().trim();
+        const isAllowed = allowed.some((u: string) => {
+          const clean = u.toLowerCase().trim();
+          return clean === userEmailLower || clean === userMssvLower;
+        });
+
+        if (!isAllowed) {
+          return res.status(403).json({ error: 'Thí sinh không được cấp quyền tham gia kỳ thi này.' });
+        }
+
+        // 5. Check attempts limits and active sessions
         const sessions = await db.getSessions();
-        let activeSession = sessions.find(s => 
-          s.quizTargetId === quiz.id && 
+        const examSessions = sessions.filter(s => 
+          s.quizTargetId === exam.quizTargetId && 
           (s.userMssv === registeredUser.mssv || s.userEmail === registeredUser.email) && 
-          s.learningMode === 'exam' && 
-          !s.isCompleted
+          s.learningMode === 'exam'
         );
 
+        let activeSession = examSessions.find(s => !s.isCompleted);
+
+        // SEB Verification check helper
+        const isSebOk = () => {
+          if (exam.useSeb === 1) {
+            return checkSebCryptographicHash(req);
+          }
+          return true; // bypassed if useSeb is 0
+        };
+
         if (activeSession) {
-          // If session exists, return its token
+          if (!isSebOk()) {
+            return res.status(403).json({ error: 'Bạn bắt buộc phải sử dụng Safe Exam Browser để truy cập bài thi này.' });
+          }
+          // Resume existing active session
           return res.json({ success: true, sessionToken: activeSession.sessionToken });
         }
 
-        // 3. Create a new exam session
-        const questions = await db.getQuestionsByQuiz(quiz.id);
+        // Check attempt limit
+        if (examSessions.length >= exam.attemptsAllowed) {
+          return res.status(403).json({ error: 'Bạn đã hết lượt tham gia kỳ thi này.' });
+        }
+
+        // If starting a new session, check SEB header requirements
+        if (!isSebOk()) {
+          return res.status(403).json({ error: 'Bạn bắt buộc phải sử dụng Safe Exam Browser để truy cập bài thi này.' });
+        }
+
+        // 6. Dynamic duration calculation
+        const examRemainingSeconds = (endTime.getTime() - now.getTime()) / 1000;
+        if (examRemainingSeconds <= 0) {
+          return res.status(403).json({ error: 'Exam Code not Available' });
+        }
+
+        const durationSeconds = exam.durationTime * 60;
+        const timeLimit = durationSeconds; // Set initial limit to full duration, late deduction calculated upon openCode entry.
+
+        // 7. Get questions to construct the quiz session
+        const questions = await db.getQuestionsByQuiz(exam.quizTargetId);
         if (questions.length === 0) {
           return res.status(400).json({ error: 'Đề thi này chưa có câu hỏi nào để bắt đầu.' });
         }
 
-        // Fetch current examOpenCode from database settings
-        const config = await db.getConfig();
-        const currentOpenCode = config?.examOpenCode || '12345';
-
         // Shuffle questions
         const shuffledQuestions = [...questions].sort(() => Math.random() - 0.5);
 
+        // Save session with exam properties
         const sessionData = {
-          quizTargetId: quiz.id,
+          quizTargetId: exam.quizTargetId,
           learningMode: 'exam',
-          startTime: new Date().toISOString(),
-          recentLearningDateTime: new Date().toISOString(),
+          startTime: now.toISOString(),
+          recentLearningDateTime: now.toISOString(),
           shuffleQuestions: true,
           shuffleAnswers: true,
           currentIndex: 0,
           studyTime: 0,
-          timeLimit: 60 * 60, // Default to 60 minutes
+          timeLimit: timeLimit,
           isCompleted: false,
           totalCorrect: 0,
           totalWrong: 0,
           userEmail: registeredUser.email,
           userName: registeredUser.name,
           userMssv: registeredUser.mssv || trimmedUserName,
-          openCode: currentOpenCode
+          openCode: exam.openCode,
+          examStarted: 0
         };
 
         const sessionId = await db.saveSession(sessionData);
@@ -180,6 +274,7 @@ async function startServer() {
         res.status(500).json({ error: err.message || 'Lỗi server khi xác thực phòng thi.' });
       }
     });
+
 
     // ─── USER MANAGEMENT (admin only) ────────────────────────────────────────
     app.get('/api/users', requireAuth, requireAdmin, async (req, res) => {
@@ -267,7 +362,11 @@ async function startServer() {
     // ─── QUIZZES API ──────────────────────────────────────────────────────────
     app.get('/api/subjects/:subjectId/quizzes', requireAuth, async (req, res) => {
       try {
-        const list = await db.getQuizzesBySubject(Number(req.params.subjectId));
+        const user = (req as any).user;
+        let list = await db.getQuizzesBySubject(Number(req.params.subjectId));
+        if (!user || !user.isAdmin) {
+          list = list.filter((q: any) => q.isExamOnly !== 1);
+        }
         res.json(list);
       } catch (err: any) {
         res.status(500).json({ error: err.message });
@@ -483,7 +582,28 @@ Do not include any markdown backticks (like \`\`\`json) in your response, return
       try {
         const user = (req as any).user;
         const emailFilter = user.isAdmin ? undefined : user.email;
-        const list = await db.getSessions(emailFilter);
+        let list = await db.getSessions(emailFilter);
+
+        const exams = await db.getExams();
+        const examMap = new Map(exams.map(e => [e.quizTargetId, e]));
+
+        list = list.map(s => {
+          if (s.learningMode === 'exam') {
+            const exam = examMap.get(s.quizTargetId);
+            if (exam) {
+              const maskScore = !user.isAdmin && exam.showScore === 0;
+              return {
+                ...s,
+                totalCorrect: maskScore ? null : s.totalCorrect,
+                totalWrong: maskScore ? null : s.totalWrong,
+                allowReview: exam.allowReview,
+                showScore: exam.showScore
+              };
+            }
+          }
+          return s;
+        });
+
         res.json(list);
       } catch (err: any) {
         res.status(500).json({ error: err.message });
@@ -497,6 +617,35 @@ Do not include any markdown backticks (like \`\`\`json) in your response, return
         if (!session) return res.status(404).json({ error: 'Session not found' });
 
         const authenticatedUser = getAuthenticatedUser(req);
+
+        // Retrieve the exam configuration if this is an exam mode session
+        let exam = null;
+        if (session.learningMode === 'exam') {
+          exam = (await db.getExams()).find(e => e.quizTargetId === session.quizTargetId);
+        }
+
+        if (exam) {
+          (session as any).examEnd = exam.timeEnd;
+          (session as any).durationTime = exam.durationTime;
+          (session as any).isScheduledExam = true;
+        }
+
+        // Apply score mask policy if not admin
+        if (exam && !authenticatedUser?.isAdmin) {
+          if (exam.showScore === 0) {
+            session.totalCorrect = null;
+            session.totalWrong = null;
+          }
+        }
+
+        // Mask openCode if the exam has ended
+        if (exam) {
+          const now = new Date();
+          const endTime = new Date(exam.timeEnd);
+          if (now > endTime) {
+            session.openCode = '';
+          }
+        }
 
         // IP Lock check for active exam sessions
         if (session.learningMode === 'exam' && !session.isCompleted) {
@@ -534,7 +683,9 @@ Do not include any markdown backticks (like \`\`\`json) in your response, return
             res.json({ session, details, questions });
           };
 
-          const isSebVerified = checkSebCryptographicHash(req);
+          // Bypass SEB verification if useSeb is 0
+          const useSeb = exam ? exam.useSeb : 1;
+          const isSebVerified = useSeb === 0 ? true : checkSebCryptographicHash(req);
 
           if (isSebVerified) {
             return sendExamData();
@@ -547,11 +698,14 @@ Do not include any markdown backticks (like \`\`\`json) in your response, return
           });
         }
 
-        // If it's a completed exam mode session, allow public access if queried by sessionToken (string ID)
+        // If it's a completed exam mode session, return details & questions based on allowReview policy
         if (session.learningMode === 'exam' && session.isCompleted) {
           const isQueriedByToken = typeof idOrToken === 'string' && isNaN(Number(idOrToken));
-          if (isQueriedByToken) {
-            const details = await db.getSessionDetails(session.id);
+          const isOwner = authenticatedUser && session.userEmail === authenticatedUser.email;
+          const isAdmin = authenticatedUser?.isAdmin;
+
+          if (isQueriedByToken || isOwner || isAdmin) {
+            let details = await db.getSessionDetails(session.id);
             // Fetch questions for this session
             let questions: any[] = [];
             if (session.quizTargetId < 0) {
@@ -564,6 +718,15 @@ Do not include any markdown backticks (like \`\`\`json) in your response, return
             } else {
               questions = await db.getQuestionsByQuiz(session.quizTargetId);
             }
+
+            // Apply allowReview policy if not admin
+            if (exam && !isAdmin) {
+              if (exam.allowReview === 0) {
+                details = [];
+                questions = []; // return empty arrays if allowReview is 0 to prevent api snooping
+              }
+            }
+
             return res.json({ session, details, questions });
           }
         }
@@ -589,7 +752,8 @@ Do not include any markdown backticks (like \`\`\`json) in your response, return
           ...req.body,
           userEmail: user.email,
           userName: user.name,
-          userMssv: user.mssv
+          userMssv: user.mssv,
+          openCode: req.body.openCode || '12345'
         };
         const id = await db.saveSession(sessionData);
         const saved = await db.getSessionById(id);
@@ -668,6 +832,18 @@ Do not include any markdown backticks (like \`\`\`json) in your response, return
             );
           }
 
+          // Retrieve the exam config for this quiz to check useSeb configuration
+          const exam = (await db.getExams()).find(e => e.quizTargetId === targetSession.quizTargetId);
+          const useSeb = exam ? exam.useSeb : 1;
+
+          if (useSeb === 0) {
+            return handleSave(
+              authenticatedUser?.email,
+              authenticatedUser?.name,
+              authenticatedUser?.mssv
+            );
+          }
+
           return verifySafeExamBrowser(req, res, () => {
             handleSave(
               authenticatedUser?.email,
@@ -736,6 +912,9 @@ Do not include any markdown backticks (like \`\`\`json) in your response, return
     app.get('/api/config/seb', async (req, res) => {
       try {
         const host = req.get('host') || '';
+        const portIndex = host.indexOf(':');
+        const baseHost = portIndex !== -1 ? host.substring(0, portIndex) : host;
+        const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
 
         const __filename = fileURLToPath(import.meta.url);
         const __dirname = path.dirname(__filename);
@@ -747,22 +926,47 @@ Do not include any markdown backticks (like \`\`\`json) in your response, return
 
         let xmlContent = fs.readFileSync(configPath, 'utf8');
 
-        // For local development on localhost/127.0.0.1, we dynamically modify the startURL
-        // to point to local development port (typically 8100 or 5173).
-        // For production, we DO NOT modify the XML at all, preserving the static file hash
-        // and matching the Browser Exam Key (BEK).
-        const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
-        if (isLocalhost) {
-          const portIndex = host.indexOf(':');
-          const baseHost = portIndex !== -1 ? host.substring(0, portIndex) : host;
-          const localStartUrl = `http://${baseHost}:8100`;
+        // Extract sessionToken from query (supporting ??sessionToken as well due to front-end link structure)
+        const sessionToken = req.query.sessionToken || req.query['?sessionToken'];
+        let startUrl = '';
 
-          const startUrlRegex = /<key>startURL<\/key>\s*<string>[^<]*<\/string>/;
-          xmlContent = xmlContent.replace(
-            startUrlRegex,
-            `<key>startURL</key>\n    <string>${localStartUrl}</string>`
-          );
+        if (sessionToken) {
+          const session = await db.getSessionByIdOrToken(String(sessionToken));
+          if (session) {
+            const exam = (await db.getExams()).find(e => e.quizTargetId === session.quizTargetId);
+            if (exam) {
+              // Scheduled exam: start at exam portal
+              if (isLocalhost) {
+                startUrl = `http://${baseHost}:8100`;
+              } else {
+                startUrl = `https://exam.myazuki.net`;
+              }
+            } else {
+              // Self-practice exam: start at play page in candidate portal
+              if (isLocalhost) {
+                startUrl = `http://${baseHost}:5173/learning/play/${session.sessionToken || session.id}`;
+              } else {
+                startUrl = `https://myazuki.net/learning/play/${session.sessionToken || session.id}`;
+              }
+            }
+          }
         }
+
+        if (!startUrl) {
+          // Default startURL fallback
+          if (isLocalhost) {
+            startUrl = `http://${baseHost}:8100`;
+          } else {
+            startUrl = `https://exam.myazuki.net`;
+          }
+        }
+
+        // Replace startURL in the XML template
+        const startUrlRegex = /<key>startURL<\/key>\s*<string>[^<]*<\/string>/;
+        xmlContent = xmlContent.replace(
+          startUrlRegex,
+          `<key>startURL</key>\n    <string>${startUrl}</string>`
+        );
 
         res.setHeader('Content-Type', 'application/x-safeexambrowser');
         res.setHeader('Content-Disposition', 'attachment; filename="exam_config.seb"');

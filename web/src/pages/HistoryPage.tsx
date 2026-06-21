@@ -58,8 +58,13 @@ export const HistoryPage: React.FC = () => {
                 {examSessions.map(s => {
                   const qz = quizzes.find(q => q.id === s.quizTargetId);
                   const subj = qz ? subjects.find(sub => sub.id === qz.subjectTargetId) : null;
-                  const total = s.totalCorrect + s.totalWrong;
-                  const scorePercent = total > 0 ? Math.round((s.totalCorrect / total) * 100) : 0;
+                  
+                  const hasScore = s.totalCorrect !== null && s.totalCorrect !== undefined;
+                  const total = hasScore ? (s.totalCorrect! + s.totalWrong!) : 0;
+                  const scorePercent = hasScore && total > 0 ? Math.round((s.totalCorrect! / total) * 100) : 0;
+                  
+                  // Hide review details button if not admin and allowReview is disabled (or showScore is disabled)
+                  const showReviewBtn = isAdmin || (s.allowReview !== 0 && hasScore);
                   
                   return (
                     <tr key={s.id}>
@@ -76,10 +81,10 @@ export const HistoryPage: React.FC = () => {
                         </td>
                       )}
                       <td>
-                        {s.totalCorrect} / {total} câu
+                        {hasScore ? `${s.totalCorrect} / ${total} câu` : 'Đã hoàn thành'}
                       </td>
-                      <td style={{ fontWeight: 700, color: scorePercent >= 50 ? 'var(--toast-success)' : 'var(--toast-error)' }}>
-                        {scorePercent}%
+                      <td style={{ fontWeight: 700, color: hasScore ? (scorePercent >= 50 ? 'var(--toast-success)' : 'var(--toast-error)') : 'var(--text-secondary)' }}>
+                        {hasScore ? `${scorePercent}%` : 'Đã ẩn'}
                       </td>
                       <td style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                         {new Date(s.startTime).toLocaleString('vi-VN')}
@@ -95,15 +100,17 @@ export const HistoryPage: React.FC = () => {
                             <span>Kết quả</span>
                           </button>
                           
-                          <button 
-                            className="btn btn-secondary py-1 px-3 flex items-center gap-1"
-                            style={{ fontSize: '0.8rem' }}
-                            onClick={() => navigateTo({ type: 'learning-review', sessionTokenOrId: s.sessionToken || String(s.id) })}
-                          >
-                            <Eye size={14} />
-                            <span>Chi tiết</span>
-                          </button>
-
+                          {showReviewBtn && (
+                            <button 
+                              className="btn btn-secondary py-1 px-3 flex items-center gap-1"
+                              style={{ fontSize: '0.8rem' }}
+                              onClick={() => navigateTo({ type: 'learning-review', sessionTokenOrId: s.sessionToken || String(s.id) })}
+                            >
+                              <Eye size={14} />
+                              <span>Chi tiết</span>
+                            </button>
+                          )}
+ 
                           <button 
                             className="btn btn-secondary py-1 px-2 text-danger flex items-center gap-1"
                             style={{ fontSize: '0.8rem', color: 'var(--toast-error)', borderColor: 'transparent' }}
