@@ -349,6 +349,13 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
     };
   }, [sessionId]);
 
+  // Automatically trigger lazy loading of questions whenever the index changes
+  useEffect(() => {
+    if (session) {
+      loadMoreIfNeeded(currentIndex);
+    }
+  }, [currentIndex, session, loadMoreIfNeeded]);
+
   // Handle study time tracking (tick study time every second)
   useEffect(() => {
     if (session && !session.isCompleted) {
