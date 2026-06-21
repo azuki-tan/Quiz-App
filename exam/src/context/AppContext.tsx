@@ -180,7 +180,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       toggleQuestion: ['KeyH'],
       checkQuestion: ['Enter'],
     },
-    examOpenCode: '12345'
+    examOpenCode: '123'
   });
 
   const loadData = async () => {

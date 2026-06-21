@@ -10,7 +10,7 @@ export const SettingPage: React.FC = () => {
   const [fontSize, setFontSize] = useState(config.fontSize);
   const [enableQuickAnswer, setEnableQuickAnswer] = useState(config.enableQuickAnswer);
   const [isMouseEnabled, setIsMouseEnabled] = useState(config.isMouseEnabled);
-  const [examOpenCode, setExamOpenCode] = useState(config.examOpenCode || '12345');
+  const [examOpenCode, setExamOpenCode] = useState(config.examOpenCode || '123');
 
   const [apiToken, setApiToken] = useState('');
   const [showToken, setShowToken] = useState(false);

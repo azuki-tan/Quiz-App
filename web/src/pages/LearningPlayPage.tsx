@@ -247,6 +247,11 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
       setCurrentIndex(s.currentIndex);
       studyTimeCounter.current = s.studyTime;
 
+      // Auto-fill openCodeInput for self-practice exams
+      if (s.learningMode === 'exam' && !s.isScheduledExam) {
+        setOpenCodeInput('123');
+      }
+
       // Store all question IDs in order (from session details)
       const qIds = (d as LearningSessionDetail[]).map((x: LearningSessionDetail) => x.questionTargetId);
       allQuestionIdsRef.current = qIds;
@@ -819,7 +824,7 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
   };
 
   const handleShowQuestion = async () => {
-    const correctOpenCode = session?.openCode || '12345';
+    const correctOpenCode = session?.openCode || '123';
     if (openCodeInput.trim() === correctOpenCode) {
       setIsExamStarted(true);
       setOpenCodeError(null);
@@ -1234,6 +1239,15 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
               <strong style={{ color: session.isCompleted ? '#EF4444' : '#10B981' }}>
                 {session.isCompleted ? 'Đã nộp bài' : (session.currentIndex > 0 ? `Đang làm dở (Câu ${session.currentIndex + 1})` : 'Chưa bắt đầu')}
               </strong>
+
+              {session.openCode && (
+                <>
+                  <span style={{ color: '#64748B', fontWeight: 'bold' }}>Mã mở đề (Open Code):</span>
+                  <strong style={{ color: '#EF4444', fontSize: '14px', fontWeight: 'bold', backgroundColor: '#FEE2E2', padding: '2px 6px', borderRadius: '4px', display: 'inline-block', width: 'fit-content' }}>
+                    {session.openCode}
+                  </strong>
+                </>
+              )}
             </div>
           </div>
 

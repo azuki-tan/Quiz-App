@@ -753,7 +753,7 @@ Do not include any markdown backticks (like \`\`\`json) in your response, return
           userEmail: user.email,
           userName: user.name,
           userMssv: user.mssv,
-          openCode: req.body.openCode || '12345'
+          openCode: req.body.openCode || '123'
         };
         const id = await db.saveSession(sessionData);
         const saved = await db.getSessionById(id);

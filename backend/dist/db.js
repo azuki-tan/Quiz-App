@@ -85,7 +85,7 @@ export async function initDb() {
       enableQuickAnswer INTEGER NOT NULL,
       isMouseEnabled INTEGER NOT NULL,
       keyBindings TEXT NOT NULL, -- JSON string
-      examOpenCode TEXT DEFAULT '12345'
+      examOpenCode TEXT DEFAULT '123'
     );
   `);
     // Create dynamic tables in userDb
@@ -146,7 +146,7 @@ export async function initDb() {
         };
         await quizDb.run(`
       INSERT INTO config (id, fontFamily, fontSize, enableQuickAnswer, isMouseEnabled, keyBindings, examOpenCode)
-      VALUES (1, 'Microsoft Sans Serif', 14, 0, 1, ?, '12345')
+      VALUES (1, 'Microsoft Sans Serif', 14, 0, 1, ?, '123')
     `, JSON.stringify(defaultKeyBindings));
     }
     // Migrations: add new columns if they don't exist yet (questions table on quizDb)
@@ -241,7 +241,7 @@ export async function initDb() {
     const configPragma = await quizDb.all('PRAGMA table_info(config)');
     const configCols = configPragma.map((c) => c.name);
     if (!configCols.includes('examOpenCode')) {
-        await quizDb.run("ALTER TABLE config ADD COLUMN examOpenCode TEXT DEFAULT '12345'");
+        await quizDb.run("ALTER TABLE config ADD COLUMN examOpenCode TEXT DEFAULT '123'");
     }
     // Quizzes table migration: add isExamOnly if not exists
     const quizzesPragma = await quizDb.all('PRAGMA table_info(quizzes)');
@@ -502,7 +502,7 @@ export async function getConfig() {
             enableQuickAnswer: !!cfg.enableQuickAnswer,
             isMouseEnabled: !!cfg.isMouseEnabled,
             keyBindings: JSON.parse(cfg.keyBindings),
-            examOpenCode: cfg.examOpenCode || '12345'
+            examOpenCode: cfg.examOpenCode || '123'
         };
     }
     return null;
@@ -512,7 +512,7 @@ export async function saveConfig(cfg) {
       fontFamily = ?, fontSize = ?, enableQuickAnswer = ?, isMouseEnabled = ?, keyBindings = ?, examOpenCode = ?
      WHERE id = 1`, [
         cfg.fontFamily, cfg.fontSize, cfg.enableQuickAnswer ? 1 : 0, cfg.isMouseEnabled ? 1 : 0,
-        JSON.stringify(cfg.keyBindings), cfg.examOpenCode || '12345'
+        JSON.stringify(cfg.keyBindings), cfg.examOpenCode || '123'
     ]);
 }
 export async function getQuizByName(name) {
