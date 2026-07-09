@@ -35,7 +35,7 @@ export const SettingPage: React.FC = () => {
       fontSize,
       enableQuickAnswer,
       isMouseEnabled,
-      examOpenCode
+      examOpenCode,
     });
     alert('Đã lưu cấu hình cài đặt thành công!');
   };
@@ -228,6 +228,7 @@ export const SettingPage: React.FC = () => {
           </div>
         </div>
       )}
+
 
       {/* Database control Settings */}
       <div className="card flex flex-col gap-4" style={{ borderColor: 'rgba(255, 77, 79, 0.2)' }}>

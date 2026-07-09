@@ -2,6 +2,7 @@ export interface Subject {
   id: number;
   code: string;
   name: string;
+  semester?: number | null;
 }
 
 export interface Quiz {
@@ -82,6 +83,9 @@ export interface AppConfig {
   isMouseEnabled: boolean;
   keyBindings: Record<ShortcutAction, string[]>;
   examOpenCode?: string;
+  aiEndpoint?: string;
+  aiApiKey?: string;
+  aiModel?: string;
 }
 
 export interface Exam {

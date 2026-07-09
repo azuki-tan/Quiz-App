@@ -1,0 +1,162 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-title: 'Outfit', sans-serif;
+  
+  --bg-light: #f8fafc;
+  --bg-card: #ffffff;
+  --border-color: #e2e8f0;
+  --border-glow: #3b82f6;
+  
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  
+  --accent-blue: #2563eb;
+  --accent-teal: #0d9488;
+  --accent-purple: #7c3aed;
+  
+  --color-success: #10b981;
+  --color-danger: #ef4444;
+  --color-warning: #f59e0b;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-light);
+  color: var(--text-primary);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Glassmorphism/Card system simplified */
+.glass-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  transition: all 0.2s ease-in-out;
+}
+
+.glass-panel:hover {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+/* Custom UI Elements */
+input {
+  font-family: var(--font-sans);
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: var(--text-primary);
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 0.95rem;
+  transition: all 0.15s ease-in-out;
+  width: 100%;
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+button {
+  font-family: var(--font-sans);
+  cursor: pointer;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  transition: all 0.15s ease-in-out;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+button.primary {
+  background: var(--accent-blue);
+  color: #ffffff;
+}
+
+button.primary:hover {
+  background: #1d4ed8;
+}
+
+button.secondary {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: var(--text-primary);
+}
+
+button.secondary:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.mathjax-container {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+/* Custom classes for results rendering */
+.score-badge {
+  font-family: var(--font-title);
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.score-success {
+  background: rgba(16, 185, 129, 0.1);
+  border: 2px solid var(--color-success);
+  color: #065f46;
+}
+
+.score-warning {
+  background: rgba(245, 158, 11, 0.1);
+  border: 2px solid var(--color-warning);
+  color: #92400e;
+}
+
+.score-danger {
+  background: rgba(239, 68, 68, 0.1);
+  border: 2px solid var(--color-danger);
+  color: #991b1b;
+}
+
+.explanation-content {
+  color: var(--text-secondary);
+}
+
+.explanation-content strong {
+  color: var(--text-primary);
+}

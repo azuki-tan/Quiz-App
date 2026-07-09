@@ -116,6 +116,20 @@ export const LearningResultPage: React.FC<LearningResultPageProps> = ({ sessionI
         </div>
       </div>
 
+      {session.allowReview !== 0 && (window.location.hostname.startsWith('exam.') || window.location.hostname.startsWith('seb.') || window.location.port === '8100') && (
+        <div style={{ margin: '8px 0', fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-primary)', textAlign: 'center' }}>
+          Tra cứu chi tiết tại{' '}
+          <a 
+            href="https://result.myazuki.net" 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            style={{ color: 'var(--accent-blue, #3b82f6)', textDecoration: 'underline', fontWeight: 700 }}
+          >
+            https://result.myazuki.net
+          </a>
+        </div>
+      )}
+
       {/* Buttons / Notice */}
       {(window.location.hostname.startsWith('exam.') || window.location.hostname.startsWith('seb.') || window.location.port === '8100') ? (
         <div className="card p-6 text-center w-full max-w-md" style={{ border: '1px solid var(--border-color)', backgroundColor: 'rgba(255, 255, 255, 0.05)', borderRadius: '12px' }}>

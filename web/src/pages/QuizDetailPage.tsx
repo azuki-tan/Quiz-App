@@ -600,9 +600,7 @@ export const QuizDetailPage: React.FC<QuizDetailPageProps> = ({ quizId }) => {
                         <span style={{ fontWeight: 600, color: ans.isCorrect ? 'var(--toast-success)' : 'var(--text-secondary)' }}>
                           {alphabet}.
                         </span>
-                        <span style={{ fontSize: '0.9rem', color: ans.isCorrect ? 'var(--toast-success)' : 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>
-                          {ans.content}
-                        </span>
+                        <span style={{ fontSize: '0.9rem', color: ans.isCorrect ? 'var(--toast-success)' : 'var(--text-primary)', whiteSpace: 'pre-wrap' }} dangerouslySetInnerHTML={{ __html: cleanHtmlExplanation(ans.content) }} />
                       </div>
                     );
                   })}

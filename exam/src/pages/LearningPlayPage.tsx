@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
-import { ArrowLeft, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { LearningSession, LearningSessionDetail, Question, Answer } from '../types';
 import confetti from 'canvas-confetti';
 import { cleanHtmlExplanation } from '../utils/html';
@@ -9,6 +8,22 @@ import { cleanHtmlExplanation } from '../utils/html';
 const INITIAL_LOAD = 10;
 const LAZY_BATCH = 15;
 const API_URL = (import.meta.env.VITE_API_URL as string) || '/api';
+
+const MathHtml = React.memo(({ html, className, style, tag: Tag = 'div' }: { html: string; className?: string; style?: React.CSSProperties; tag?: 'div' | 'span' }) => {
+  useEffect(() => {
+    if ((window as any).MathJax) {
+      (window as any).MathJax.typesetPromise?.().catch((e: any) => console.error(e));
+    }
+  });
+
+  return (
+    <Tag 
+      className={`tex2jax_process ${className || ''}`} 
+      style={style} 
+      dangerouslySetInnerHTML={{ __html: cleanHtmlExplanation(html) }} 
+    />
+  );
+}, (prev, next) => prev.html === next.html && prev.className === next.className && prev.tag === next.tag && JSON.stringify(prev.style) === JSON.stringify(next.style));
 
 interface LearningPlayPageProps {
   sessionId: string;
@@ -43,28 +58,7 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
   const [openCodeError, setOpenCodeError] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [requireSeb, setRequireSeb] = useState(false);
-  const [showSidebar, setShowSidebar] = useState(true);
 
-  // get study stats of "Đang học" and "Đã học"
-  const getStudyStats = () => {
-    let stillLearning = 0;
-    let mastered = 0;
-    if (!session || !details) return { stillLearning, mastered };
-    
-    const uniqueQuestionIds = Array.from(new Set(details.map(d => d.questionTargetId)));
-    uniqueQuestionIds.forEach(qId => {
-      const progress = localStorage.getItem(`study_progress_${session.id}_${qId}`);
-      if (progress === '0' || progress === '1') {
-        stillLearning++;
-      } else if (progress === '2') {
-        mastered++;
-      }
-    });
-    
-    return { stillLearning, mastered };
-  };
-
-  const { stillLearning, mastered } = getStudyStats();
 
   const examCodeName = React.useMemo(() => {
     if (!session) return 'TEST_M';
@@ -1380,9 +1374,43 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
     );
   }
 
+  if (session.learningMode !== 'exam') {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        width: '100vw',
+        backgroundColor: '#111827',
+        color: '#FFFFFF',
+        fontFamily: 'Inter, sans-serif',
+        padding: '20px',
+        textAlign: 'center'
+      }}>
+        <div style={{
+          backgroundColor: '#1F2937',
+          padding: '40px',
+          borderRadius: '12px',
+          maxWidth: '500px',
+          width: '100%',
+          border: '1px solid #374151'
+        }}>
+          <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '16px', color: '#EF4444' }}>
+            Không hỗ trợ chế độ này
+          </h2>
+          <p style={{ fontSize: '15px', color: '#9CA3AF', lineHeight: '1.6', marginBottom: '24px' }}>
+            Không hỗ trợ chế độ tự học/luyện tập trên Cổng thi cử (Exam Portal). Vui lòng quay lại Cổng thông tin học tập chính thức để sử dụng tính năng này.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (session.learningMode === 'exam') {
     return (
-      <div className="eos-layout animate-fade-in" style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', backgroundColor: '#FFFFFF', fontFamily: `"${localFontFamily}", Arial, sans-serif`, overflow: 'hidden', userSelect: 'none' }}>
+      <div className="eos-layout animate-fade-in tex2jax_process" style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', backgroundColor: '#FFFFFF', fontFamily: `"${localFontFamily}", Arial, sans-serif`, overflow: 'hidden', userSelect: 'none' }}>
         {/* 1. Header (Windows style beige/grey bar changed to white) */}
         <div className="eos-header" style={{
           backgroundColor: '#FFFFFF',
@@ -1810,7 +1838,7 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
                   lineHeight: '1.5',
                   marginBottom: currentQuestion?.imageUrl ? '16px' : '28px'
                 }}>
-                  <div dangerouslySetInnerHTML={{ __html: cleanHtmlExplanation(currentQuestion?.content) }} />
+                  <MathHtml style={{ whiteSpace: 'pre-wrap' }} html={currentQuestion?.content || ''} />
                 </div>
 
                 {/* Question image (if any) */}
@@ -1821,12 +1849,13 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
                     style={{
                       display: 'block',
                       maxWidth: '100%',
+                      width: `${450 * (localFontSize / (config.fontSize || 14))}px`,
                       maxHeight: `${280 * (localFontSize / (config.fontSize || 14))}px`,
                       objectFit: 'contain',
                       borderRadius: '4px',
                       marginBottom: '20px',
                       border: '1px solid #CCCCCC',
-                      transition: 'max-height 0.2s ease'
+                      transition: 'all 0.2s ease'
                     }}
                   />
                 )}
@@ -1848,7 +1877,7 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
                           lineHeight: '1.4'
                         }}
                       >
-                        {alphabet}. {ans.content}
+                        {alphabet}. <MathHtml tag="span" style={{ whiteSpace: 'pre-wrap' }} html={ans.content} />
                       </div>
                     );
                   })}
@@ -1951,710 +1980,5 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
     );
   }
 
-  return (
-    <div className={`${session.learningMode === 'study' ? 'p-4 gap-3' : 'p-6 gap-4'} animate-fade-in flex flex-col overflow-hidden`} style={{ height: '100%' }}>
-      {/* Play Header */}
-      <div className="flex justify-between items-center" style={{ flexShrink: 0 }}>
-        <div className="flex items-center gap-3">
-          <button className="btn btn-secondary p-2" style={{ borderRadius: '50%' }} onClick={handleBack}>
-            <ArrowLeft size={18} />
-          </button>
-          <div>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 700 }}>
-              {session.learningMode === 'study' ? '📖 Chế độ Học tập' :
-                session.learningMode === 'practice' ? '✏️ Chế độ Luyện tập' : '⏱️ Chế độ Thi cử'}
-            </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>
-                Câu hỏi số {currentIndex + 1} / {details.length}
-                {session.learningMode === 'study' && currentIndex > 0 && (
-                  <button 
-                    onClick={handlePrev} 
-                    style={{ 
-                      background: 'none', 
-                      border: 'none', 
-                      color: 'var(--primary-color)', 
-                      cursor: 'pointer', 
-                      fontSize: '0.8rem', 
-                      textDecoration: 'underline',
-                      padding: 0,
-                      marginLeft: '12px'
-                    }}
-                  >
-                    (Xem câu trước)
-                  </button>
-                )}
-              </p>
-              {session.learningMode === 'study' && (
-                <div style={{ display: 'flex', gap: '16px', fontSize: '0.85rem', fontWeight: 600, marginTop: '2px' }}>
-                  <span style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#ef4444' }} />
-                    Đang học: {stillLearning}
-                  </span>
-                  <span style={{ color: '#22c55e', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#22c55e' }} />
-                    Đã học: {mastered}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          {session.learningMode !== 'study' && (
-            <button
-              onClick={() => setShowSidebar(prev => !prev)}
-              className="btn btn-secondary flex items-center gap-1"
-              style={{
-                padding: '8px 16px',
-                fontSize: '0.85rem',
-                fontWeight: 600,
-                borderRadius: '8px',
-                border: '1px solid var(--border-color)',
-                backgroundColor: '#FFFFFF',
-                cursor: 'pointer'
-              }}
-            >
-              {showSidebar ? 'Ẩn bản đồ' : 'Hiện bản đồ'}
-            </button>
-          )}
-
-          {/* Timer/Clock */}
-          {(session.learningMode as string) === 'exam' && timeLeft !== null && (
-            <div className="flex items-center gap-2 px-4 py-2" style={{ backgroundColor: 'rgba(255, 77, 79, 0.1)', border: '1px solid rgba(255, 77, 79, 0.2)', borderRadius: '8px', color: 'var(--toast-error)', fontWeight: 700 }}>
-              <Clock size={18} />
-              <span>{formatTime(timeLeft)}</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Progress Bar */}
-      <div style={{ height: '4px', backgroundColor: '#E2E8F0', borderRadius: '2px', width: '100%', flexShrink: 0 }}>
-        <div
-          style={{
-            height: '100%',
-            backgroundColor: 'var(--primary-color)',
-            width: `${((currentIndex + 1) / details.length) * 100}%`,
-            transition: 'width 0.3s ease'
-          }}
-        />
-      </div>
-
-      <div className="flex flex-1 gap-6 overflow-hidden">
-        {/* Main Quiz Area */}
-        <div className="flex-1 flex flex-col justify-between overflow-y-auto px-1">
-          <div className="flex flex-col gap-4">
-            {session.learningMode === 'study' ? (
-              /* Flashcard Mode (Quizlet style) */
-              (() => {
-                const contentCharCount = currentQuestion?.content?.length || 0;
-                const choicesTotalLength = currentAnswers.reduce((acc, a) => acc + (a.content?.length || 0), 0);
-                const isQuestionLong = contentCharCount > 150 || choicesTotalLength > 150;
-                const isQuestionVeryLong = contentCharCount > 350 || choicesTotalLength > 300;
-                
-                const questionFontSize = isQuestionVeryLong ? '1.0rem' : isQuestionLong ? '1.15rem' : '1.35rem';
-                const choicesFontSize = isQuestionVeryLong ? '0.85rem' : isQuestionLong ? '0.92rem' : '1rem';
-                const choicesPadding = isQuestionVeryLong ? '8px 12px' : isQuestionLong ? '10px 14px' : '12px 16px';
-                const choicesGap = isQuestionVeryLong ? '6px' : isQuestionLong ? '8px' : '10px';
-                const flashcardPadding = isQuestionVeryLong ? '1.25rem 1.5rem' : '1.75rem 2rem';
-
-                return (
-                  <div className="flex flex-col items-center justify-between h-full w-full gap-6">
-                    <div
-                      className={`flashcard-container ${isFlipped ? 'is-flipped' : ''}`}
-                      onClick={() => setIsFlipped(!isFlipped)}
-                      style={{ cursor: 'pointer', width: '100%', maxWidth: '900px', height: 'calc(100vh - 270px)', maxHeight: '720px', minHeight: '380px' }}
-                    >
-                      <div className="flashcard-inner">
-                        {/* Front Side: Question content & Choices list */}
-                        <div className="flashcard-front" style={{ padding: flashcardPadding, overflowY: 'auto' }}>
-                          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
-                            <div style={{ fontSize: questionFontSize, fontWeight: 700, lineHeight: 1.5, textAlign: 'center', marginBottom: '20px', color: 'var(--text-primary)' }}>
-                              <div style={{ whiteSpace: 'pre-wrap' }} dangerouslySetInnerHTML={{ __html: cleanHtmlExplanation(currentQuestion?.content) }} />
-                            </div>
-
-                            {/* Question image */}
-                            {currentQuestion?.imageUrl && (
-                              <img
-                                src={currentQuestion.imageUrl}
-                                alt="Hình ảnh câu hỏi"
-                                style={{ maxWidth: '100%', maxHeight: isQuestionVeryLong ? '140px' : isQuestionLong ? '180px' : '220px', objectFit: 'contain', borderRadius: '8px', marginBottom: '12px', border: '1px solid var(--border-color)' }}
-                              />
-                            )}
-
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: choicesGap, width: '100%', maxWidth: '600px', marginTop: '16px' }}>
-                              {currentAnswers.map((ans, idx) => {
-                                const alphabet = String.fromCharCode(65 + idx);
-                                return (
-                                  <div
-                                    key={ans.id}
-                                    style={{
-                                      padding: choicesPadding,
-                                      borderRadius: '8px',
-                                      border: '1px solid var(--border-color)',
-                                      backgroundColor: '#F8FAFC',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '12px',
-                                      textAlign: 'left',
-                                      width: '100%',
-                                      fontSize: choicesFontSize,
-                                      fontWeight: 500,
-                                      color: 'var(--text-primary)',
-                                    }}
-                                  >
-                                    <div
-                                      style={{
-                                        width: isQuestionVeryLong ? '24px' : '28px',
-                                        height: isQuestionVeryLong ? '24px' : '28px',
-                                        borderRadius: '50%',
-                                        backgroundColor: '#E2E8F0',
-                                        color: 'var(--text-secondary)',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        fontWeight: 700,
-                                        fontSize: isQuestionVeryLong ? '0.75rem' : '0.85rem',
-                                        flexShrink: 0
-                                      }}
-                                    >
-                                      {alphabet}
-                                    </div>
-                                    <span style={{ whiteSpace: 'pre-wrap' }}>{ans.content}</span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-
-                            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: 'auto', paddingTop: '20px' }}>
-                              👆 Bấm bất kỳ đâu trên thẻ hoặc nhấn Space để lật qua lật lại
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Back Side: Correct answer text/letter */}
-                        <div className="flashcard-back" style={{ padding: flashcardPadding, overflowY: 'auto' }}>
-                          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
-                            <div style={{ fontSize: '1.25rem', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '16px' }}>Đáp án đúng</div>
-                            
-                            {/* Display the correct answers explicitly */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: choicesGap, width: '100%', maxWidth: '600px' }}>
-                              {currentAnswers.map((ans, idx) => {
-                                if (!ans.isCorrect) return null;
-                                const alphabet = String.fromCharCode(65 + idx);
-                                return (
-                                  <div
-                                    key={ans.id}
-                                    style={{
-                                      padding: choicesPadding,
-                                      borderRadius: '8px',
-                                      border: '2px solid #22c55e',
-                                      backgroundColor: 'rgba(34, 197, 94, 0.05)',
-                                      color: '#16a34a',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '12px',
-                                      textAlign: 'left',
-                                      width: '100%',
-                                      fontSize: choicesFontSize,
-                                      fontWeight: 700,
-                                    }}
-                                  >
-                                    <div
-                                      style={{
-                                        width: isQuestionVeryLong ? '24px' : '28px',
-                                        height: isQuestionVeryLong ? '24px' : '28px',
-                                        borderRadius: '50%',
-                                        backgroundColor: '#22c55e',
-                                        color: 'white',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        fontWeight: 700,
-                                        fontSize: isQuestionVeryLong ? '0.75rem' : '0.85rem',
-                                        flexShrink: 0
-                                      }}
-                                    >
-                                      {alphabet}
-                                    </div>
-                                    <span style={{ whiteSpace: 'pre-wrap' }}>{ans.content}</span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                            
-                            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: 'auto', paddingTop: '20px' }}>
-                              👆 Bấm bất kỳ đâu trên thẻ hoặc nhấn Space để lật qua lật lại
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Fixed controls under/below the flashcard */}
-                    <div style={{ 
-                      display: 'flex', 
-                      flexDirection: 'column', 
-                      alignItems: 'center', 
-                      gap: '10px', 
-                      width: '100%', 
-                      maxWidth: '500px', 
-                      flexShrink: 0,
-                      paddingBottom: '16px'
-                    }}>
-                      <div style={{ display: 'flex', gap: '16px', width: '100%' }}>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleStillLearning(); }}
-                          style={{
-                            flex: 1,
-                            padding: '12px 20px',
-                            borderRadius: '12px',
-                            border: '1px solid #ef4444',
-                            backgroundColor: 'rgba(239, 68, 68, 0.05)',
-                            color: '#dc2626',
-                            fontWeight: 700,
-                            fontSize: '1rem',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '8px',
-                            transition: 'all 0.2s'
-                          }}
-                          onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)'}
-                          onMouseLeave={e => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.05)'}
-                        >
-                          ← Đang Học
-                        </button>
-
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setShowExplanationPopup(true); }}
-                          style={{
-                            flex: 1,
-                            padding: '12px 20px',
-                            borderRadius: '12px',
-                            border: '1px solid #3b82f6',
-                            backgroundColor: showExplanationPopup ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.05)',
-                            color: '#2563eb',
-                            fontWeight: 700,
-                            fontSize: '1rem',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '8px',
-                            transition: 'all 0.2s'
-                          }}
-                          onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.1)'}
-                          onMouseLeave={e => e.currentTarget.style.backgroundColor = showExplanationPopup ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.05)'}
-                        >
-                          💡 Lời giải (C)
-                        </button>
-
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleKnown(); }}
-                          style={{
-                            flex: 1,
-                            padding: '12px 20px',
-                            borderRadius: '12px',
-                            border: '1px solid #22c55e',
-                            backgroundColor: 'rgba(34, 197, 94, 0.05)',
-                            color: '#16a34a',
-                            fontWeight: 700,
-                            fontSize: '1rem',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '8px',
-                            transition: 'all 0.2s'
-                          }}
-                          onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(34, 197, 94, 0.1)'}
-                          onMouseLeave={e => e.currentTarget.style.backgroundColor = 'rgba(34, 197, 94, 0.05)'}
-                        >
-                          Đã biết →
-                        </button>
-                      </div>
-                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
-                        Phím tắt: <strong>←</strong> (Đang học), <strong>→</strong> (Đã biết), <strong>C</strong> (Lời giải), <strong>Space</strong> (Lật thẻ)
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()
-            ) : (
-              /* Practice / Exam mode normal question content & choices */
-              <>
-                {/* Question Text Card */}
-                <div className="card p-6" style={{ borderLeft: '5px solid var(--primary-color)' }}>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 700, lineHeight: 1.5 }}>
-                    <div dangerouslySetInnerHTML={{ __html: cleanHtmlExplanation(currentQuestion?.content) }} />
-                  </div>
-                  {/* Question image */}
-                  {currentQuestion?.imageUrl && (
-                    <img
-                      src={currentQuestion.imageUrl}
-                      alt="Hình ảnh câu hỏi"
-                      style={{ display: 'block', maxWidth: '100%', maxHeight: '300px', objectFit: 'contain', borderRadius: '8px', marginTop: '12px', border: '1px solid var(--border-color)' }}
-                    />
-                  )}
-                </div>
-
-                {/* Answer Options Card */}
-                <div className="flex flex-col gap-3">
-                  {currentAnswers.map((ans, idx) => {
-                    const alphabet = String.fromCharCode(65 + idx);
-                    const selectedList = currentDetail.selectedAnswersList ? currentDetail.selectedAnswersList.map(Number) : [];
-                    const isSelected = selectedList.includes(Number(ans.id));
-
-                    // Styling per mode
-                    let optionStyle: React.CSSProperties = {
-                      border: '1px solid var(--border-color)',
-                      backgroundColor: isSelected ? 'var(--sidebar-active)' : '#FFFFFF',
-                      cursor: isAnswerChecked ? 'default' : 'pointer',
-                      padding: '16px',
-                      borderRadius: '10px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      transition: 'all 0.2s',
-                      width: '100%',
-                      textAlign: 'left'
-                    };
-
-                    // Highlight correct/incorrect answers in Practice mode after clicking "Check"
-                    if (session.learningMode === 'practice' && isAnswerChecked) {
-                      if (ans.isCorrect) {
-                        optionStyle.borderColor = 'var(--toast-success)';
-                        optionStyle.backgroundColor = 'rgba(82, 196, 26, 0.08)';
-                      } else if (isSelected && !ans.isCorrect) {
-                        optionStyle.borderColor = 'var(--toast-error)';
-                        optionStyle.backgroundColor = 'rgba(255, 77, 79, 0.08)';
-                      }
-                    }
-
-                    return (
-                      <button
-                        key={ans.id}
-                        style={optionStyle}
-                        onClick={() => handleSelectAnswer(ans.id)}
-                        className="group"
-                      >
-                        {/* Circle Indicator */}
-                        <div
-                          className="flex items-center justify-center font-bold"
-                          style={{
-                            width: '32px',
-                            height: '32px',
-                            borderRadius: '50%',
-                            backgroundColor: isSelected ? 'var(--primary-color)' : '#F1F5F9',
-                            color: isSelected ? 'white' : 'var(--text-secondary)',
-                            fontSize: '0.9rem',
-                            flexShrink: 0
-                          }}
-                        >
-                          {alphabet}
-                        </div>
-
-                        <span style={{ fontSize: '1rem', fontWeight: isSelected ? 600 : 500 }}>
-                          {ans.content}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Explanation box */}
-                {showExplanation && (currentQuestion?.explanation || currentQuestion?.explanationImage) && (
-                  <div
-                    className="animate-fade-in p-4"
-                    style={{
-                      backgroundColor: 'rgba(1, 117, 194, 0.04)',
-                      borderLeft: '4px solid var(--primary-color)',
-                      borderRadius: '0 8px 8px 0',
-                      marginTop: '12px'
-                    }}
-                  >
-                    <div style={{ fontWeight: 700, color: 'var(--primary-color)', marginBottom: '4px', fontSize: '0.9rem' }}>
-                      💡 Giải thích chi tiết:
-                    </div>
-                    {currentQuestion?.explanation && (
-                      <div
-                        className="explanation-content"
-                        style={{ fontSize: '0.95rem', lineHeight: 1.4 }}
-                        dangerouslySetInnerHTML={{ __html: cleanHtmlExplanation(currentQuestion.explanation) }}
-                      />
-                    )}
-                    {currentQuestion?.explanationImage && (
-                      <img
-                        src={currentQuestion.explanationImage}
-                        alt="Hình ảnh giải thích"
-                        style={{ display: 'block', maxWidth: '100%', maxHeight: '220px', objectFit: 'contain', borderRadius: '6px', marginTop: '10px', border: '1px solid var(--border-color)' }}
-                      />
-                    )}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-
-          {/* Action buttons (Prev, Check, Next) */}
-          {session.learningMode !== 'study' && (
-            <div className="flex justify-between items-center py-4 mt-6" style={{ borderTop: '1px solid var(--border-color)' }}>
-              <button
-                className="btn btn-secondary flex items-center gap-1"
-                onClick={handlePrev}
-              >
-                <ChevronLeft size={18} />
-                <span>Câu trước</span>
-              </button>
-
-              <div className="flex gap-2">
-                {(session.learningMode as string) === 'exam' && currentIndex === details.length - 1 && (
-                  <button
-                    className="btn btn-danger"
-                    onClick={() => handleExamSubmit(false)}
-                  >
-                    Nộp bài thi
-                  </button>
-                )}
-
-                <button
-                  className="btn btn-primary flex items-center gap-1"
-                  onClick={handleNext}
-                  disabled={session.learningMode === 'practice' && !isAnswerChecked}
-                >
-                  <span>{currentIndex === details.length - 1 ? 'Hoàn thành (Space)' : 'Câu tiếp (Space)'}</span>
-                  <ChevronRight size={18} />
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Question Panel Sidebar (hidden in Study mode) */}
-        {session.learningMode !== 'study' && showSidebar && (
-          <div
-            className="card flex flex-col gap-4"
-            style={{
-              width: '260px',
-              backgroundColor: '#FFFFFF',
-              flexShrink: 0,
-              overflowY: 'auto'
-            }}
-          >
-            <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>Bản đồ câu hỏi</div>
-
-            {/* Grid buttons */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px' }}>
-              {details.map((d, idx) => {
-                const isCurrent = idx === currentIndex;
-                const isSelected = d.selectedAnswersList && Array.isArray(d.selectedAnswersList) && d.selectedAnswersList.length > 0;
-
-                // Colors
-                let bgColor = '#F1F5F9';
-                let textColor = 'var(--text-secondary)';
-                let border = '2px solid transparent';
-
-                if (isCurrent) {
-                  border = '2px solid var(--primary-color)';
-                }
-
-                if (session.learningMode === 'exam') {
-                  if (isSelected) {
-                    bgColor = 'var(--primary-color)';
-                    textColor = '#FFFFFF';
-                  }
-                } else {
-                  // Study/Practice
-                  if (d.isChecked) {
-                    if (d.isCorrect) {
-                      bgColor = 'var(--toast-success)';
-                      textColor = '#FFFFFF';
-                    } else {
-                      bgColor = 'var(--toast-error)';
-                      textColor = '#FFFFFF';
-                    }
-                  } else if (isSelected) {
-                    bgColor = 'var(--sidebar-header)';
-                    textColor = '#FFFFFF';
-                  }
-                }
-
-                return (
-                  <button
-                    key={d.id}
-                    onClick={() => {
-                      setCurrentIndex(idx);
-                      setIsAnswerChecked(d.isChecked);
-                      setShowExplanation(d.isChecked);
-                    }}
-                    style={{
-                      width: '38px',
-                      height: '38px',
-                      borderRadius: '8px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '0.85rem',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      backgroundColor: bgColor,
-                      color: textColor,
-                      border,
-                      transition: 'all 0.15s'
-                    }}
-                  >
-                    {idx + 1}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '10px' }} className="flex flex-col gap-2">
-              <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
-                <div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: 'var(--primary-color)' }} />
-                <span>Đã trả lời / đang chọn</span>
-              </div>
-              {(session.learningMode as string) !== 'exam' && (
-                <>
-                  <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
-                    <div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: 'var(--toast-success)' }} />
-                    <span>Trả lời đúng</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
-                    <div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: 'var(--toast-error)' }} />
-                    <span>Trả lời sai</span>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Explanation Bottom Sheet Modal */}
-      {showExplanationPopup && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(15, 23, 42, 0.3)',
-            backdropFilter: 'blur(4px)',
-            display: 'flex',
-            alignItems: 'flex-end',
-            justifyContent: 'center',
-            zIndex: 1000,
-            animation: 'fadeIn 0.2s ease-out'
-          }}
-          onClick={() => setShowExplanationPopup(false)}
-        >
-          <div
-            style={{
-              backgroundColor: '#FFFFFF',
-              width: '100%',
-              maxWidth: '800px',
-              maxHeight: '75vh',
-              borderTopLeftRadius: '24px',
-              borderTopRightRadius: '24px',
-              boxShadow: '0 -10px 25px -5px rgba(0, 0, 0, 0.1), 0 -8px 10px -6px rgba(0, 0, 0, 0.1)',
-              display: 'flex',
-              flexDirection: 'column',
-              padding: '24px 32px',
-              animation: 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-              position: 'relative'
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Drag handle / Indicator bar */}
-            <div style={{
-              width: '40px',
-              height: '4px',
-              backgroundColor: '#CBD5E1',
-              borderRadius: '2px',
-              margin: '-8px auto 16px auto',
-              flexShrink: 0
-            }} />
-
-            {/* Header */}
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '16px',
-              borderBottom: '1px solid #E2E8F0',
-              paddingBottom: '12px',
-              flexShrink: 0
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '1.25rem' }}>💡</span>
-                <h4 style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--primary-color)', margin: 0 }}>Lời giải chi tiết</h4>
-              </div>
-              <button
-                onClick={() => setShowExplanationPopup(false)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  fontSize: '1.5rem',
-                  cursor: 'pointer',
-                  color: '#94A3B8',
-                  transition: 'color 0.2s',
-                  lineHeight: 1,
-                  padding: '4px'
-                }}
-                onMouseEnter={e => e.currentTarget.style.color = '#475569'}
-                onMouseLeave={e => e.currentTarget.style.color = '#94A3B8'}
-              >
-                &times;
-              </button>
-            </div>
-
-            {/* Scrollable Content */}
-            <div
-              className="explanation-popup-body"
-              style={{
-                overflowY: 'auto',
-                flex: 1,
-                paddingRight: '8px',
-                fontSize: '1.05rem',
-                lineHeight: '1.6',
-                color: '#334155'
-              }}
-            >
-              {currentQuestion?.explanation ? (
-                <div
-                  className="explanation-content"
-                  dangerouslySetInnerHTML={{ __html: cleanHtmlExplanation(currentQuestion.explanation) }}
-                />
-              ) : (
-                <div style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>Không có giải thích chi tiết cho câu hỏi này.</div>
-              )}
-
-              {currentQuestion?.explanationImage && (
-                <img
-                  src={currentQuestion.explanationImage}
-                  alt="Hình ảnh giải thích"
-                  style={{
-                    display: 'block',
-                    maxWidth: '100%',
-                    maxHeight: '350px',
-                    objectFit: 'contain',
-                    borderRadius: '8px',
-                    marginTop: '16px',
-                    border: '1px solid #E2E8F0',
-                    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)'
-                  }}
-                />
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  return null;
 };

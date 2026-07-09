@@ -15,7 +15,8 @@ export type ActivePage =
   | { type: 'setting' }
   | { type: 'history' }
   | { type: 'users' }
-  | { type: 'exam-admin' };
+  | { type: 'exam-admin' }
+  | { type: 'ai-assistant' };
 
 interface AppContextType {
   // Navigation
@@ -33,8 +34,8 @@ interface AppContextType {
   loadData: () => Promise<void>;
 
   // Subject Actions
-  createSubject: (code: string, name: string) => Promise<number>;
-  updateSubject: (id: number, code: string, name: string) => Promise<void>;
+  createSubject: (code: string, name: string, semester?: number | null) => Promise<number>;
+  updateSubject: (id: number, code: string, name: string, semester?: number | null) => Promise<void>;
   deleteSubject: (id: number) => Promise<void>;
 
   // Quiz Actions
@@ -49,7 +50,7 @@ interface AppContextType {
   getQuestionById: (id: number) => Promise<Question | null>;
 
   // Session Actions
-  startNewSession: (quizId: number, mode: 'study' | 'practice' | 'exam', settings: { shuffleQuestions: boolean; shuffleAnswers: boolean; timeLimit?: number; subjectId?: number; questionLimit?: number }) => Promise<string>;
+  startNewSession: (quizId: number, mode: 'study' | 'practice' | 'exam', settings: { shuffleQuestions: boolean; shuffleAnswers: boolean; timeLimit?: number; subjectId?: number; questionLimit?: number; questionIds?: number[] }) => Promise<string>;
   updateSession: (session: LearningSession, details: LearningSessionDetail[]) => Promise<void>;
   deleteSession: (id: number) => Promise<void>;
   getSessionWithDetails: (idOrToken: string | number) => Promise<{ session: LearningSession; details: LearningSessionDetail[] } | null>;
@@ -118,6 +119,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return '/users';
       case 'exam-admin':
         return '/exam-admin';
+      case 'ai-assistant':
+        return '/ai-assistant';
       default:
         return '/dashboard';
     }
@@ -158,6 +161,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (parts[0] === 'history') return { type: 'history' };
     if (parts[0] === 'users') return { type: 'users' };
     if (parts[0] === 'exam-admin') return { type: 'exam-admin' };
+    if (parts[0] === 'ai-assistant') return { type: 'ai-assistant' };
 
     return { type: 'dashboard' };
   };
@@ -187,6 +191,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       toggleQuestion: ['KeyH'],
       checkQuestion: ['Enter'],
     },
+    aiEndpoint: 'http://10.9.0.3:8091',
+    aiApiKey: '',
+    aiModel: 'gemini/gemini-1.5-flash',
   });
 
   const loadData = async () => {
@@ -442,10 +449,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [activePage, subjects, quizzes, sessions]);
 
   // --- CRUD ACTIONS ---
-  const createSubject = async (code: string, name: string) => {
+  const createSubject = async (code: string, name: string, semester?: number | null) => {
     const { id } = await apiCall<{ id: number }>('/subjects', {
       method: 'POST',
-      body: JSON.stringify({ code, name }),
+      body: JSON.stringify({ code, name, semester }),
     });
     await loadData();
     return id;
@@ -458,10 +465,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await loadData();
   };
 
-  const updateSubject = async (id: number, code: string, name: string) => {
+  const updateSubject = async (id: number, code: string, name: string, semester?: number | null) => {
     await apiCall('/subjects', {
       method: 'POST',
-      body: JSON.stringify({ id, code, name }),
+      body: JSON.stringify({ id, code, name, semester }),
     });
     await loadData();
   };
@@ -520,11 +527,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const startNewSession = async (
     quizId: number,
     mode: 'study' | 'practice' | 'exam',
-    settings: { shuffleQuestions: boolean; shuffleAnswers: boolean; timeLimit?: number; subjectId?: number; questionLimit?: number }
+    settings: { shuffleQuestions: boolean; shuffleAnswers: boolean; timeLimit?: number; subjectId?: number; questionLimit?: number; questionIds?: number[] }
   ) => {
     // 1. Load questions
     let questions: Question[] = [];
-    if ((mode === 'study' || mode === 'practice') && settings.subjectId) {
+    if (settings.questionIds && settings.questionIds.length > 0) {
+      for (const qId of settings.questionIds) {
+        const q = await getQuestionById(qId);
+        if (q) questions.push(q);
+      }
+    } else if ((mode === 'study' || mode === 'practice') && settings.subjectId) {
       const subjectQuizzes = await apiCall<Quiz[]>(`/subjects/${settings.subjectId}/quizzes`);
       for (const qz of subjectQuizzes) {
         const qzQuestions = await apiCall<Question[]>(`/quizzes/${qz.id}/questions`);

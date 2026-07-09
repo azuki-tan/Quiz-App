@@ -58,7 +58,8 @@ export async function initDb() {
     CREATE TABLE IF NOT EXISTS subjects (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       code TEXT NOT NULL UNIQUE,
-      name TEXT NOT NULL
+      name TEXT NOT NULL,
+      semester INTEGER DEFAULT NULL
     );
 
     CREATE TABLE IF NOT EXISTS quizzes (
@@ -96,6 +97,20 @@ export async function initDb() {
     );
   `);
 
+  try {
+    await quizDb.run("ALTER TABLE config ADD COLUMN aiEndpoint TEXT DEFAULT 'http://10.9.0.3:8091'");
+  } catch (e) {}
+  try {
+    await quizDb.run("ALTER TABLE config ADD COLUMN aiApiKey TEXT DEFAULT ''");
+  } catch (e) {}
+  try {
+    await quizDb.run("ALTER TABLE config ADD COLUMN aiModel TEXT DEFAULT 'gemini/gemini-1.5-flash'");
+  } catch (e) {}
+
+  try {
+    await quizDb.run("ALTER TABLE subjects ADD COLUMN semester INTEGER DEFAULT NULL");
+  } catch (e) {}
+
   // Create dynamic tables in userDb
   await userDb.exec(`
     CREATE TABLE IF NOT EXISTS users (
@@ -103,6 +118,7 @@ export async function initDb() {
       email TEXT NOT NULL UNIQUE,
       name TEXT NOT NULL,
       mssv TEXT NOT NULL DEFAULT '',
+      class TEXT NOT NULL DEFAULT '',
       is_active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL
     );
@@ -129,7 +145,8 @@ export async function initDb() {
       userName TEXT,
       userMssv TEXT,
       openCode TEXT,
-      examStarted INTEGER DEFAULT 0
+      examStarted INTEGER DEFAULT 0,
+      isScheduledExam INTEGER DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS session_details (
@@ -143,6 +160,14 @@ export async function initDb() {
       FOREIGN KEY (learningSessionId) REFERENCES sessions(id) ON DELETE CASCADE
     );
   `);
+
+  try {
+    await userDb.run("ALTER TABLE users ADD COLUMN class TEXT DEFAULT ''");
+  } catch (e) {}
+
+  try {
+    await userDb.run("ALTER TABLE sessions ADD COLUMN isScheduledExam INTEGER DEFAULT 0");
+  } catch (e) {}
 
   // Insert default config if empty in config table
   const configExists = await quizDb.get('SELECT 1 FROM config WHERE id = 1');
@@ -273,6 +298,17 @@ export async function initDb() {
     await quizDb.run('ALTER TABLE quizzes ADD COLUMN isExamOnly INTEGER DEFAULT 0');
   }
 
+  // Create indexes to optimize queries
+  await userDb.exec(`
+    CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(userEmail);
+    CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(sessionToken);
+    CREATE INDEX IF NOT EXISTS idx_session_details_session ON session_details(learningSessionId);
+  `);
+  await quizDb.exec(`
+    CREATE INDEX IF NOT EXISTS idx_answers_question ON answers(questionTargetId);
+    CREATE INDEX IF NOT EXISTS idx_questions_quiz ON questions(quizTargetId);
+  `);
+
   console.log('SQLite Databases initialized successfully.');
   console.log('  - Static quiz database at:', dbPath);
   console.log('  - User progress database at:', userDbPath);
@@ -284,17 +320,17 @@ export async function getSubjects() {
   return quizDb.all('SELECT * FROM subjects');
 }
 
-export async function saveSubject(subject: { id?: number; code: string; name: string }) {
+export async function saveSubject(subject: { id?: number; code: string; name: string; semester?: number | null }) {
   if (subject.id) {
     await quizDb.run(
-      'UPDATE subjects SET code = ?, name = ? WHERE id = ?',
-      [subject.code, subject.name, subject.id]
+      'UPDATE subjects SET code = ?, name = ?, semester = ? WHERE id = ?',
+      [subject.code, subject.name, subject.semester ?? null, subject.id]
     );
     return subject.id;
   } else {
     const result = await quizDb.run(
-      'INSERT INTO subjects (code, name) VALUES (?, ?)',
-      [subject.code, subject.name]
+      'INSERT INTO subjects (code, name, semester) VALUES (?, ?, ?)',
+      [subject.code, subject.name, subject.semester ?? null]
     );
     return result.lastID!;
   }
@@ -458,6 +494,7 @@ export async function saveSession(session: {
   userMssv?: string | null;
   openCode?: string | null;
   examStarted?: number | boolean | null;
+  isScheduledExam?: number | null;
 }) {
   const sessionToken = session.sessionToken || (session.id ? null : crypto.randomBytes(16).toString('hex'));
 
@@ -469,7 +506,7 @@ export async function saveSession(session: {
         timeLimit = ?, isCompleted = ?, endTime = ?, totalCorrect = ?, totalWrong = ?,
         identifyingId = ?, lockToken = ?, sessionToken = COALESCE(?, sessionToken),
         userEmail = COALESCE(?, userEmail), userName = COALESCE(?, userName), userMssv = COALESCE(?, userMssv),
-        openCode = ?, examStarted = ?
+        openCode = ?, examStarted = ?, isScheduledExam = ?
        WHERE id = ?`,
       [
         session.quizTargetId, session.learningMode, session.startTime, session.recentLearningDateTime,
@@ -477,7 +514,7 @@ export async function saveSession(session: {
         session.timeLimit ?? null, session.isCompleted ? 1 : 0, session.endTime ?? null, session.totalCorrect, session.totalWrong,
         session.identifyingId ?? null, session.lockToken ?? null, sessionToken,
         session.userEmail ?? null, session.userName ?? null, session.userMssv ?? null,
-        session.openCode ?? null, session.examStarted ? 1 : 0,
+        session.openCode ?? null, session.examStarted ? 1 : 0, session.isScheduledExam ?? 0,
         session.id
       ]
     );
@@ -489,15 +526,15 @@ export async function saveSession(session: {
         quizTargetId, learningMode, startTime, recentLearningDateTime, 
         shuffleQuestions, shuffleAnswers, currentIndex, studyTime, 
         timeLimit, isCompleted, endTime, totalCorrect, totalWrong,
-        identifyingId, lockToken, sessionToken, userEmail, userName, userMssv, openCode, examStarted
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        identifyingId, lockToken, sessionToken, userEmail, userName, userMssv, openCode, examStarted, isScheduledExam
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         session.quizTargetId, session.learningMode, session.startTime, session.recentLearningDateTime,
         session.shuffleQuestions ? 1 : 0, session.shuffleAnswers ? 1 : 0, session.currentIndex, session.studyTime,
         session.timeLimit ?? null, session.isCompleted ? 1 : 0, session.endTime ?? null, session.totalCorrect, session.totalWrong,
         session.identifyingId ?? null, session.lockToken ?? null, finalToken,
         session.userEmail ?? null, session.userName ?? null, session.userMssv ?? null,
-        session.openCode ?? null, session.examStarted ? 1 : 0
+        session.openCode ?? null, session.examStarted ? 1 : 0, session.isScheduledExam ?? 0
       ]
     );
     return result.lastID!;
@@ -617,7 +654,10 @@ export async function getConfig() {
       enableQuickAnswer: !!cfg.enableQuickAnswer,
       isMouseEnabled: !!cfg.isMouseEnabled,
       keyBindings: JSON.parse(cfg.keyBindings),
-      examOpenCode: cfg.examOpenCode || '123'
+      examOpenCode: cfg.examOpenCode || '123',
+      aiEndpoint: cfg.aiEndpoint || 'http://10.9.0.3:8091',
+      aiApiKey: cfg.aiApiKey || '',
+      aiModel: cfg.aiModel || 'gemini/gemini-1.5-flash'
     };
   }
   return null;
@@ -630,14 +670,19 @@ export async function saveConfig(cfg: {
   isMouseEnabled: boolean;
   keyBindings: Record<string, string[]>;
   examOpenCode?: string;
+  aiEndpoint?: string;
+  aiApiKey?: string;
+  aiModel?: string;
 }) {
   await quizDb.run(
     `UPDATE config SET 
-      fontFamily = ?, fontSize = ?, enableQuickAnswer = ?, isMouseEnabled = ?, keyBindings = ?, examOpenCode = ?
+      fontFamily = ?, fontSize = ?, enableQuickAnswer = ?, isMouseEnabled = ?, keyBindings = ?, examOpenCode = ?,
+      aiEndpoint = ?, aiApiKey = ?, aiModel = ?
      WHERE id = 1`,
     [
       cfg.fontFamily, cfg.fontSize, cfg.enableQuickAnswer ? 1 : 0, cfg.isMouseEnabled ? 1 : 0,
-      JSON.stringify(cfg.keyBindings), cfg.examOpenCode || '123'
+      JSON.stringify(cfg.keyBindings), cfg.examOpenCode || '123',
+      cfg.aiEndpoint || 'http://10.9.0.3:8091', cfg.aiApiKey || '', cfg.aiModel || 'gemini/gemini-1.5-flash'
     ]
   );
 }
@@ -672,10 +717,10 @@ export async function getUserByEmailOrMssv(username: string) {
   return userDb.get('SELECT * FROM users WHERE (LOWER(email) = ? OR LOWER(mssv) = ?) AND is_active = 1', [clean, clean]);
 }
 
-export async function createUser(user: { email: string; name: string; mssv: string }) {
+export async function createUser(user: { email: string; name: string; mssv: string; class?: string }) {
   const result = await userDb.run(
-    'INSERT INTO users (email, name, mssv, is_active, created_at) VALUES (?, ?, ?, 1, ?)',
-    [user.email.toLowerCase().trim(), user.name, user.mssv, new Date().toISOString()]
+    'INSERT INTO users (email, name, mssv, class, is_active, created_at) VALUES (?, ?, ?, ?, 1, ?)',
+    [user.email.toLowerCase().trim(), user.name, user.mssv, user.class || '', new Date().toISOString()]
   );
   return result.lastID!;
 }
@@ -684,11 +729,21 @@ export async function deleteUser(id: number) {
   await userDb.run('DELETE FROM users WHERE id = ?', [id]);
 }
 
-export async function updateUser(id: number, user: { email: string; name: string; mssv: string }) {
+export async function updateUser(id: number, user: { email: string; name: string; mssv: string; class?: string }) {
   await userDb.run(
-    'UPDATE users SET email = ?, name = ?, mssv = ? WHERE id = ?',
-    [user.email.toLowerCase().trim(), user.name, user.mssv, id]
+    'UPDATE users SET email = ?, name = ?, mssv = ?, class = ? WHERE id = ?',
+    [user.email.toLowerCase().trim(), user.name, user.mssv, user.class || '', id]
   );
+}
+
+export async function bulkDeleteUsers(ids: number[]) {
+  const placeholders = ids.map(() => '?').join(',');
+  await userDb.run(`DELETE FROM users WHERE id IN (${placeholders})`, ids);
+}
+
+export async function bulkUpdateUsersClass(ids: number[], userClass: string) {
+  const placeholders = ids.map(() => '?').join(',');
+  await userDb.run(`UPDATE users SET class = ? WHERE id IN (${placeholders})`, [userClass, ...ids]);
 }
 
 // --- EXAMS CRUD ---

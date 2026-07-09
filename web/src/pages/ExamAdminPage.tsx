@@ -9,6 +9,7 @@ interface AppUser {
   name: string;
   mssv: string;
   is_active: number;
+  class?: string;
 }
 
 export const ExamAdminPage: React.FC = () => {
@@ -263,6 +264,30 @@ export const ExamAdminPage: React.FC = () => {
     
     if (!cleanList.includes(identifier)) {
       cleanList.push(identifier);
+      setAllowedUsersInput(cleanList.join(', '));
+    }
+  };
+
+  const handleAddClassUsers = (className: string) => {
+    if (!className) return;
+    const classUsers = users.filter(u => u.class === className);
+    if (classUsers.length === 0) return;
+    
+    const cleanList = allowedUsersInput
+      .split(',')
+      .map(u => u.trim())
+      .filter(u => u.length > 0);
+      
+    let addedAny = false;
+    classUsers.forEach(u => {
+      const identifier = u.mssv || u.email;
+      if (!cleanList.includes(identifier)) {
+        cleanList.push(identifier);
+        addedAny = true;
+      }
+    });
+    
+    if (addedAny) {
       setAllowedUsersInput(cleanList.join(', '));
     }
   };
@@ -590,7 +615,7 @@ export const ExamAdminPage: React.FC = () => {
                       type="number"
                       className="input"
                       min={1}
-                      max={10}
+                      max={9999}
                       required
                       value={attemptsAllowed}
                       onChange={e => setAttemptsAllowed(Number(e.target.value))}
@@ -637,31 +662,57 @@ export const ExamAdminPage: React.FC = () => {
                   </p>
 
                   {/* Registered Users Picker shortcut */}
-                  {users.length > 0 && (
-                    <div style={{ marginTop: '8px' }}>
-                      <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Click nhanh để thêm thí sinh đăng ký:</span>
-                      <div style={{
-                        display: 'flex', gap: '6px', flexWrap: 'wrap', maxHeight: '90px', overflowY: 'auto',
-                        padding: '6px', border: '1px dashed #cbd5e1', borderRadius: '6px', marginTop: '4px'
-                      }}>
-                        {users.map(u => (
-                          <button
-                            key={u.id}
-                            type="button"
-                            onClick={() => handleAddUserTag(u.mssv || u.email)}
-                            style={{
-                              fontSize: '0.72rem', backgroundColor: '#e2e8f0', border: 'none',
-                              borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', fontWeight: 500
-                            }}
-                            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#cbd5e1'}
-                            onMouseLeave={e => e.currentTarget.style.backgroundColor = '#e2e8f0'}
-                          >
-                            {u.name} ({u.mssv || u.email.split('@')[0]})
-                          </button>
-                        ))}
+                  {users.length > 0 && (() => {
+                    const uniqueClasses = Array.from(new Set(users.map(u => u.class || '').filter(Boolean)));
+                    return (
+                      <div style={{ marginTop: '8px' }}>
+                        {uniqueClasses.length > 0 && (
+                          <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Thêm theo Lớp học (Class):</span>
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                              {uniqueClasses.map(cls => (
+                                <button
+                                  key={cls}
+                                  type="button"
+                                  onClick={() => handleAddClassUsers(cls)}
+                                  style={{
+                                    fontSize: '0.72rem', backgroundColor: '#dbeafe', border: '1px solid #bfdbfe',
+                                    borderRadius: '4px', padding: '2px 8px', cursor: 'pointer', fontWeight: 600,
+                                    color: '#1d4ed8'
+                                  }}
+                                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#bfdbfe'}
+                                  onMouseLeave={e => e.currentTarget.style.backgroundColor = '#dbeafe'}
+                                >
+                                  + Thêm Lớp {cls}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Click nhanh để thêm thí sinh đăng ký:</span>
+                        <div style={{
+                          display: 'flex', gap: '6px', flexWrap: 'wrap', maxHeight: '90px', overflowY: 'auto',
+                          padding: '6px', border: '1px dashed #cbd5e1', borderRadius: '6px', marginTop: '4px'
+                        }}>
+                          {users.map(u => (
+                            <button
+                              key={u.id}
+                              type="button"
+                              onClick={() => handleAddUserTag(u.mssv || u.email)}
+                              style={{
+                                fontSize: '0.72rem', backgroundColor: '#e2e8f0', border: 'none',
+                                borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', fontWeight: 500
+                              }}
+                              onMouseEnter={e => e.currentTarget.style.backgroundColor = '#cbd5e1'}
+                              onMouseLeave={e => e.currentTarget.style.backgroundColor = '#e2e8f0'}
+                            >
+                              {u.name} ({u.mssv || u.email.split('@')[0]})
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
 
                 {/* Policies Toggles */}

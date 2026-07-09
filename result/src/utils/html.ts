@@ -200,7 +200,7 @@ export function cleanHtmlExplanation(htmlStr: string | null | undefined): string
     '\\\\div': '÷',
     '\\\\to': '→',
     '\\\\rightarrow': '→',
-    '\\\\leftarrow': '←',
+    '\\\\leftsnarrow': '←',
     '\\\\equiv': '≡',
     '\\\\approx': '≈',
     '\\\\leq': '≤',

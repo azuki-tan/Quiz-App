@@ -180,7 +180,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       toggleQuestion: ['KeyH'],
       checkQuestion: ['Enter'],
     },
-    examOpenCode: '123'
+    examOpenCode: '123',
+    aiEndpoint: 'http://10.9.0.3:8091',
+    aiApiKey: '',
+    aiModel: 'gemini/gemini-1.5-flash',
   });
 
   const loadData = async () => {

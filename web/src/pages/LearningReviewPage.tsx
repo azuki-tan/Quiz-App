@@ -260,7 +260,7 @@ export const LearningReviewPage: React.FC<LearningReviewPageProps> = ({ sessionI
                         >
                           {alphabet}
                         </div>
-                        <span className="flex-1" style={{ whiteSpace: 'pre-wrap' }}>{ans.content}</span>
+                        <span className="flex-1" style={{ whiteSpace: 'pre-wrap' }} dangerouslySetInnerHTML={{ __html: cleanHtmlExplanation(ans.content) }} />
 
                         {/* Checkmarks and Bạn chọn indicators */}
                         <div className="flex items-center gap-2" style={{ marginLeft: 'auto', flexShrink: 0 }}>

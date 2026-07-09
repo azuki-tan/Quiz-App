@@ -146,6 +146,20 @@ export const LearningResultPage: React.FC<LearningResultPageProps> = ({ sessionI
         </div>
       )}
 
+      {session.isScheduledExam && session.allowReview !== 0 && isExamSubdomain && (
+        <div style={{ margin: '8px 0', fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-primary)', textAlign: 'center' }}>
+          Tra cứu chi tiết tại{' '}
+          <a 
+            href="https://result.myazuki.net" 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            style={{ color: 'var(--accent-blue, #3b82f6)', textDecoration: 'underline', fontWeight: 700 }}
+          >
+            https://result.myazuki.net
+          </a>
+        </div>
+      )}
+
       {/* Buttons / Notice */}
       {isExamSubdomain ? (
         hasScore && (

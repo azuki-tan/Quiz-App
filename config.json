@@ -1,0 +1,7 @@
+{
+    "server_url": "http://10.9.0.2:8099",
+    "api_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Inh1YW50aGFpMjAwODA2QGdtYWlsLmNvbSIsIm5hbWUiOiJIaW1lbW9yaSBBenVraSIsIm1zc3YiOiIiLCJpc0FkbWluIjp0cnVlLCJwaWN0dXJlIjoiaHR0cHM6Ly9saDMuZ29vZ2xldXNlcmNvbnRlbnQuY29tL2EvQUNnOG9jS1UwNzI0bVE0Smd0YjZIcEhoWndMbkNVZmxXUlNCenQ1bHhHdUZ4akRKakI1ZEZPN0dkQT1zOTYtYyIsImlhdCI6MTc4MTYzMDk1MiwiZXhwIjoxNzgyMjM1NzUyfQ.uuIkoD23Tw62MI2f7PnSt2Iv_mrjJRM_yyuhpYPn0CA",
+    "model": "gemini/gemini-1.5-flash",
+    "ai_endpoint": "http://10.9.0.3:8091",
+    "ai_key": "sk-5OGLweafkCDD5swbrPXoNQ"
+}

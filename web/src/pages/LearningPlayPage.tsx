@@ -36,12 +36,8 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
   const [isFlipped, setIsFlipped] = useState(false);
   const [showExplanationPopup, setShowExplanationPopup] = useState(false);
 
-  // Exam blocking & start states
   const [isBlocked, setIsBlocked] = useState(false);
   const [isExamStarted, setIsExamStarted] = useState(false);
-  const [openCodeInput, setOpenCodeInput] = useState('');
-  const [openCodeError, setOpenCodeError] = useState<string | null>(null);
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [requireSeb, setRequireSeb] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
 
@@ -84,48 +80,10 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
   const updateSession = useCallback(async (s: LearningSession, d: LearningSessionDetail[]) => {
     try {
       await rawUpdateSession(s, d);
-      setIsOnline(true);
     } catch (e) {
       console.warn('Network issue or save failed:', e);
-      setIsOnline(false);
       throw e;
     }
-  }, [rawUpdateSession]);
-
-  useEffect(() => {
-    const handleOnline = () => {
-      setIsOnline(true);
-      const { session: currentS, currentIndex: currentIdx, details: currentD } = latestStateRef.current;
-      if (currentS && !currentS.isCompleted && currentS.learningMode === 'exam') {
-        const sessionToSave = {
-          ...currentS,
-          currentIndex: currentIdx,
-          studyTime: studyTimeCounter.current
-        };
-        const detailsToSave = currentD.map(d => ({
-          ...d,
-          id: d.id < 0 ? 0 : d.id
-        }));
-        rawUpdateSession(sessionToSave, detailsToSave)
-          .then(() => console.log('Reconnected: successfully synced session progress to server'))
-          .catch(e => {
-            console.warn('Failed to sync on reconnect:', e);
-            setIsOnline(false);
-          });
-      }
-    };
-
-    const handleOffline = () => {
-      setIsOnline(false);
-    };
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
   }, [rawUpdateSession]);
 
   useEffect(() => {
@@ -133,7 +91,7 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
     setShowExplanationPopup(false);
   }, [currentIndex]);
 
-  // Trigger MathJax typeset on card flip, question change, or explanation toggle
+  // Trigger MathJax typeset on every render with a short debounce to capture React DOM updates
   useEffect(() => {
     const timer = setTimeout(() => {
       if ((window as any).MathJax) {
@@ -141,10 +99,8 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
       }
     }, 120);
     return () => clearTimeout(timer);
-  }, [currentIndex, showExplanation, isFlipped, showExplanationPopup]);
-  const [isFinishChecked, setIsFinishChecked] = useState(false);
-  const [localFontSize, setLocalFontSize] = useState(config.fontSize);
-  const [localFontFamily, setLocalFontFamily] = useState(config.fontFamily);
+  });
+
 
   // Timer reference
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
@@ -247,10 +203,7 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
       setCurrentIndex(s.currentIndex);
       studyTimeCounter.current = s.studyTime;
 
-      // Auto-fill openCodeInput for self-practice exams
-      if (s.learningMode === 'exam' && !s.isScheduledExam) {
-        setOpenCodeInput('123');
-      }
+
 
       // Store all question IDs in order (from session details)
       const qIds = (d as LearningSessionDetail[]).map((x: LearningSessionDetail) => x.questionTargetId);
@@ -823,34 +776,6 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
     }
   };
 
-  const handleShowQuestion = async () => {
-    const correctOpenCode = session?.openCode || '123';
-    if (openCodeInput.trim() === correctOpenCode) {
-      setIsExamStarted(true);
-      setOpenCodeError(null);
-      if (session) {
-        localStorage.setItem(`exam_started_${session.id}`, 'true');
-
-        // Reset startTime to now so the timer begins exactly now!
-        const nowStr = new Date().toISOString();
-        const updatedS = {
-          ...session,
-          startTime: nowStr,
-          recentLearningDateTime: nowStr
-        };
-        setSession(updatedS);
-        // Sync to server
-        await updateSession(updatedS, details);
-
-        // Reset timeLeft to config time limit
-        if (session.timeLimit) {
-          setTimeLeft(session.timeLimit);
-        }
-      }
-    } else {
-      setOpenCodeError('Sai Opencode');
-    }
-  };
 
   const handlePracticeSubmit = async () => {
     if (!session) return;
@@ -1382,570 +1307,48 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
 
   if (session.learningMode === 'exam') {
     return (
-      <div className="eos-layout animate-fade-in" style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', backgroundColor: '#FFFFFF', fontFamily: `"${localFontFamily}", Arial, sans-serif`, overflow: 'hidden', userSelect: 'none' }}>
-        {/* 1. Header (Windows style beige/grey bar changed to white) */}
-        <div className="eos-header" style={{
-          backgroundColor: '#FFFFFF',
-          borderBottom: '1px solid #CCCCCC',
-          padding: '10px 14px',
-          display: 'grid',
-          gridTemplateColumns: '55% 20% 25%',
-          fontSize: '12px',
-          flexShrink: 0,
-          gap: '14px'
-        }}>
-          {/* Column 1: System Details & Actions */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {/* Top row: Checkbox and Submit Button */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 'bold', color: '#000', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={isFinishChecked}
-                  onChange={(e) => setIsFinishChecked(e.target.checked)}
-                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                />
-                <span style={{ color: '#000' }}>I want to finish the exam.</span>
-              </label>
-              <button
-                type="button"
-                onClick={() => handleExamSubmit(false)}
-                disabled={!isFinishChecked}
-                style={{
-                  padding: '4px 14px',
-                  border: '1px solid #CCCCCC',
-                  borderRadius: '3px',
-                  backgroundColor: '#FFFFFF',
-                  color: isFinishChecked ? '#000000' : '#888888',
-                  cursor: isFinishChecked ? 'pointer' : 'not-allowed',
-                  fontSize: '12px',
-                  fontWeight: 'bold'
-                }}
-              >
-                Finish (Submit)
-              </button>
-            </div>
-
-            {/* Bottom: Info grid */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(4, 1fr)',
-              gap: '6px 8px',
-              fontFamily: '"Microsoft Sans Serif", Arial',
-              fontSize: '11px',
-              color: '#000',
-              marginTop: '4px'
-            }}>
-              <div>Machine: <strong style={{ color: '#000' }}>SEB_CLIENT</strong></div>
-              <div>Exam Code: <strong style={{ color: '#000' }}>{examCodeName}</strong></div>
-              <div>Vol:
-                <span style={{ display: 'inline-flex', alignItems: 'center', marginLeft: '3px', border: '1px solid #808080', backgroundColor: '#FFF', padding: '1px 3px' }}>
-                  <span style={{ width: '14px', textAlign: 'center', fontWeight: 'bold' }}>8</span>
-                  <span style={{ display: 'flex', flexDirection: 'column', fontSize: '7px', cursor: 'pointer', marginLeft: '3px', lineHeight: '0.8' }}>
-                    <span>▲</span>
-                    <span>▼</span>
-                  </span>
-                </span>
-              </div>
-              <div></div>
-
-              <div>Server: <strong style={{ color: '#000' }}>Eng_EOS_1403202</strong></div>
-              <div>Student: <strong style={{ color: '#000' }}>{session.userMssv || session.userEmail || currentUser?.mssv || currentUser?.email || '—'}</strong></div>
-              <div>Name: <strong style={{ color: '#000' }}>{session.userName || currentUser?.name || '—'}</strong></div>
-              <div></div>
-
-              <div>Duration: <strong style={{ color: '#000' }}>{session.timeLimit ? `${Math.round(session.timeLimit / 60)} minutes` : '120 minutes'}</strong></div>
-              <div style={{ gridColumn: 'span 2', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                Open Code:
-                <input
-                  type="text"
-                  value={openCodeInput}
-                  onChange={(e) => setOpenCodeInput(e.target.value)}
-                  disabled={isExamStarted}
-                  placeholder="Mã..."
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleShowQuestion();
-                    }
-                  }}
-                  style={{ width: '60px', height: '18px', border: '1px solid #808080', padding: '1px 3px', fontSize: '11px', textAlign: 'center', backgroundColor: isExamStarted ? '#F3F4F6' : '#FFF', fontWeight: 'bold' }}
-                />
-                <button
-                  type="button"
-                  onClick={handleShowQuestion}
-                  disabled={isExamStarted}
-                  style={{
-                    fontSize: '10px',
-                    padding: '2px 6px',
-                    border: '1px solid #CCCCCC',
-                    backgroundColor: isExamStarted ? '#F3F4F6' : '#FFFFFF',
-                    cursor: isExamStarted ? 'not-allowed' : 'pointer',
-                    fontWeight: 'bold',
-                    borderRadius: '3px',
-                    color: isExamStarted ? '#888888' : '#000000'
-                  }}
-                >
-                  Show Question
-                </button>
-                {openCodeError && (
-                  <span style={{ color: '#CC0000', fontSize: '11px', fontWeight: 'bold', marginLeft: '4px' }}>
-                    {openCodeError}
-                  </span>
-                )}
-              </div>
-              <div>
-                Font:
-                <select
-                  value={localFontFamily}
-                  onChange={(e) => {
-                    setLocalFontFamily(e.target.value);
-                    document.documentElement.style.setProperty('--font-family', `"${e.target.value}", Arial, sans-serif`);
-                  }}
-                  style={{ fontSize: '11px', marginLeft: '3px', padding: '1px 2px', border: '1px solid #808080', backgroundColor: '#FFFFFF', color: '#000', fontWeight: 'bold' }}
-                >
-                  <option value="Microsoft Sans Serif">Microsoft Sans Serif</option>
-                  <option value="Arial">Arial</option>
-                  <option value="Times New Roman">Times New Roman</option>
-                </select>
-              </div>
-
-              <div>Q mark: <strong style={{ color: '#000' }}>1</strong></div>
-              <div>Total Marks: <strong style={{ color: '#000' }}>{details.length}</strong></div>
-              <div></div>
-              <div>
-                Size:
-                <span style={{ display: 'inline-flex', alignItems: 'center', marginLeft: '3px' }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const newSize = Math.max(localFontSize - 1, 10);
-                      setLocalFontSize(newSize);
-                      document.documentElement.style.setProperty('--font-size-base', `${newSize}px`);
-                    }}
-                    style={{ width: '15px', height: '15px', border: '1px solid #CCCCCC', backgroundColor: '#FFFFFF', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: '#000', fontSize: '8px', borderRadius: '3px' }}
-                  >
-                    ◀
-                  </button>
-                  <span style={{ minWidth: '18px', textAlign: 'center', fontWeight: 'bold', fontSize: '11px' }}>{localFontSize}</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const newSize = Math.min(localFontSize + 1, 24);
-                      setLocalFontSize(newSize);
-                      document.documentElement.style.setProperty('--font-size-base', `${newSize}px`);
-                    }}
-                    style={{ width: '15px', height: '15px', border: '1px solid #CCCCCC', backgroundColor: '#FFFFFF', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: '#000', fontSize: '8px', borderRadius: '3px' }}
-                  >
-                    ▶
-                  </button>
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Column 2: Photo, Ferrari, Timer */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', borderLeft: '1px solid #CCCCCC', borderRight: '1px solid #CCCCCC', padding: '0 10px' }}>
-            <div style={{ fontWeight: 'bold', fontSize: '15px', color: '#000', marginBottom: '2px' }}>
-              {session.identifyingId || 37896}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative' }}>
-              {/* Avatar Picture or SVG */}
-              <div style={{ position: 'relative', width: '46px', height: '55px', border: '1px solid #808080' }}>
-                {currentUser?.picture ? (
-                  <img
-                    src={currentUser.picture}
-                    alt="Avatar"
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  />
-                ) : (
-                  <svg viewBox="0 0 100 120" style={{ width: '100%', height: '100%', backgroundColor: '#D0D3D4' }}>
-                    <rect width="100" height="120" fill="#D0D3D4" />
-                    <path d="M 15,120 L 85,120 L 80,100 L 65,95 L 50,105 L 35,95 L 20,100 Z" fill="#FF5500" />
-                    <path d="M 35,95 L 50,105 L 65,95 L 50,90 Z" fill="#CC4400" />
-                    <rect x="42" y="80" width="16" height="20" fill="#F5CBA7" />
-                    <ellipse cx="50" cy="55" rx="22" ry="26" fill="#F5CBA7" />
-                    <path d="M 28,45 Q 50,30 72,45 C 75,35 68,25 50,25 C 32,25 25,35 28,45 Z" fill="#2C3E50" />
-                    <rect x="33" y="48" width="14" height="10" rx="2" fill="none" stroke="#000000" strokeWidth="2" />
-                    <rect x="53" y="48" width="14" height="10" rx="2" fill="none" stroke="#000000" strokeWidth="2" />
-                    <line x1="47" y1="53" x2="53" y2="53" stroke="#000000" strokeWidth="2" />
-                    <circle cx="40" cy="53" r="2" fill="#000" />
-                    <circle cx="60" cy="53" r="2" fill="#000" />
-                    <path d="M 50,55 L 48,63 L 52,63" fill="none" stroke="#D35400" strokeWidth="1.5" />
-                    <path d="M 44,72 Q 50,75 56,72" fill="none" stroke="#D35400" strokeWidth="2" />
-                  </svg>
-                )}
-                {/* Green active dot */}
-                <div style={{ position: 'absolute', bottom: '-2px', right: '-2px', width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#00FF00', border: '1px solid #000' }}></div>
-              </div>
-
-              {/* Ferrari Shield SVG */}
-              <svg viewBox="0 0 60 80" style={{ width: '38px', height: '48px' }}>
-                <path d="M 5,5 Q 30,0 55,5 L 55,45 Q 55,65 30,78 Q 5,65 5,45 Z" fill="#FFEB00" stroke="#000000" strokeWidth="1.5" />
-                <rect x="10" y="7" width="13" height="6" fill="#009246" />
-                <rect x="23" y="6" width="14" height="6" fill="#F1F2F1" />
-                <rect x="37" y="7" width="13" height="6" fill="#CE2B37" />
-                <path d="M 32,20 C 32,20 30,22 28,21 C 26,20 25,22 26,24 C 27,26 28,25 29,27 C 28,29 26,30 25,32 C 24,34 26,35 28,34 C 29,33 30,35 29,38 C 28,40 27,42 25,43 C 24,44 26,45 28,44 C 30,43 32,45 31,48 C 30,51 29,54 27,56 C 29,56 31,54 33,51 C 34,48 35,46 35,43 C 36,44 38,45 40,43 C 38,41 37,39 36,37 C 37,35 39,36 41,34 C 39,33 38,32 37,30 C 37,28 39,28 41,27 C 39,26 38,25 37,24 C 36,22 37,20 38,18 C 36,19 35,21 34,22 C 33,21 33,20 32,20 Z" fill="#000000" />
-                <text x="15" y="70" fontFamily="sans-serif" fontSize="10" fontWeight="bold" fill="#000000">S</text>
-                <text x="38" y="70" fontFamily="sans-serif" fontSize="10" fontWeight="bold" fill="#000000">F</text>
-              </svg>
-            </div>
-
-            {/* Time Left & Blue Countdown Timer */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '3px' }}>
-              <span style={{ fontSize: '11px', color: '#555', fontWeight: 'bold' }}>Time Left:</span>
-              {timeLeft !== null && (
-                <span style={{ fontSize: '24px', fontWeight: 'bold', color: '#0000FF', fontFamily: 'monospace' }}>
-                  {formatTime(timeLeft)}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Column 3: Guidelines scroll box (white background, no demo text) */}
-          <div style={{
-            border: '1px solid #CCCCCC',
-            backgroundColor: '#FFFFFF',
-            height: '80px',
-            overflowY: 'auto',
-            padding: '4px',
-            fontSize: '9.5px',
-            fontFamily: 'monospace',
-            lineHeight: '1.25',
-            color: '#333'
-          }}>
-            <div style={{ fontWeight: 'bold', borderBottom: '1px solid #CCCCCC', paddingBottom: '2px', marginBottom: '2px' }}>
-              ĐÂY LÀ GIAO DIỆN DEMO EOS, KHÔNG PHẢI LÀ PHIÊN BẢN EOS CỦA ĐẠI HỌC FPT
-            </div>
-            <div>Vietnam Audio: 0 - 2m50s - English Audio: 2m51s - 4m40s</div>
-            <div>Reading: 2</div>
-            <div>Multiple Choice: 35</div>
-            <div>Matching: 2</div>
-            <div>Fill Blank: 6</div>
-            <div>Indicate Mistake: 4</div>
-          </div>
-        </div>
-
-        {/* 2. Tabs Row */}
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        width: '100vw',
+        backgroundColor: '#111827',
+        color: '#FFFFFF',
+        fontFamily: 'Inter, sans-serif',
+        padding: '20px',
+        textAlign: 'center'
+      }}>
         <div style={{
-          display: 'flex',
-          justifyContent: 'flex-end',
-          alignItems: 'center',
-          backgroundColor: '#FFFFFF',
-          borderBottom: '1px solid #CCCCCC',
-          padding: '6px 14px',
-          flexShrink: 0
+          backgroundColor: '#1F2937',
+          padding: '40px',
+          borderRadius: '12px',
+          maxWidth: '500px',
+          width: '100%',
+          border: '1px solid #374151'
         }}>
-          {/* Right: Zoom controls */}
-          <div style={{ display: 'flex', gap: '4px' }}>
-            <button
-              type="button"
-              onClick={() => {
-                const defaultSize = config.fontSize || 14;
-                setLocalFontSize(defaultSize);
-                document.documentElement.style.setProperty('--font-size-base', `${defaultSize}px`);
-              }}
-              style={{ padding: '3px 8px', fontSize: '11px', border: '1px solid #CCCCCC', backgroundColor: '#FFFFFF', cursor: 'pointer', fontWeight: 'bold', borderRadius: '3px' }}
-            >
-              Resize
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const newSize = Math.min(localFontSize + 1, 24);
-                setLocalFontSize(newSize);
-                document.documentElement.style.setProperty('--font-size-base', `${newSize}px`);
-              }}
-              style={{ padding: '3px 8px', fontSize: '11px', border: '1px solid #CCCCCC', backgroundColor: '#FFFFFF', cursor: 'pointer', fontWeight: 'bold', borderRadius: '3px' }}
-            >
-              Zoom In
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const newSize = Math.max(localFontSize - 1, 10);
-                setLocalFontSize(newSize);
-                document.documentElement.style.setProperty('--font-size-base', `${newSize}px`);
-              }}
-              style={{ padding: '3px 8px', fontSize: '11px', border: '1px solid #CCCCCC', backgroundColor: '#FFFFFF', cursor: 'pointer', fontWeight: 'bold', borderRadius: '3px' }}
-            >
-              Zoom Out
-            </button>
-          </div>
-        </div>
-
-        {/* 3. Progress Banner */}
-        <div style={{
-          backgroundColor: '#FFFFFF',
-          padding: '6px 16px',
-          display: 'flex',
-          alignItems: 'center',
-          fontSize: '13px',
-          color: '#008000',
-          fontWeight: 'bold',
-          flexShrink: 0,
-          borderBottom: '1px solid #CCCCCC',
-          gap: '12px'
-        }}>
-          <div>
-            There are {details.length} questions, and your progress of answering is
-          </div>
-          <div style={{
-            flex: 1,
-            height: '18px',
-            border: '1px solid #CCCCCC',
-            backgroundColor: '#FFFFFF',
-            position: 'relative',
-            maxWidth: '350px',
-            borderRadius: '2px'
-          }}>
-            <div style={{
-              height: '100%',
-              backgroundColor: '#00CC00',
-              width: `${(details.filter(d => d.selectedAnswersList && Array.isArray(d.selectedAnswersList) && d.selectedAnswersList.length > 0).length / details.length) * 100}%`,
-              transition: 'width 0.2s'
-            }}></div>
-          </div>
-        </div>
-
-        {/* 4. Split Area */}
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden', backgroundColor: '#FFFFFF' }}>
-          {/* Left panel: Answer selection */}
-          <div style={{
-            width: '160px',
-            backgroundColor: '#FFFFFF',
-            borderRight: '4px solid #CC0000',
-            display: 'flex',
-            flexDirection: 'column',
-            padding: '16px 12px',
-            justifyContent: 'space-between',
-            flexShrink: 0
-          }}>
-            <div>
-              <div style={{ fontWeight: 'bold', fontSize: '16px', color: '#008000' }}>
-                Answer
-              </div>
-              <div style={{ fontSize: '11px', color: '#333', marginTop: '2px', borderBottom: '1px solid #E5E7EB', paddingBottom: '4px', marginBottom: '12px' }}>
-                (Choose answers)
-              </div>
-
-              {/* Checkboxes A, B, C, D */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingLeft: '6px' }}>
-                {isExamStarted ? (
-                  currentAnswers.map((ans, idx) => {
-                    const alphabet = String.fromCharCode(65 + idx);
-                    const selectedList = currentDetail.selectedAnswersList ? currentDetail.selectedAnswersList.map(Number) : [];
-                    const isSelected = selectedList.includes(Number(ans.id));
-                    return (
-                      <label key={ans.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold', color: '#000' }}>
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => handleSelectAnswer(ans.id)}
-                          style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                        />
-                        <span>{alphabet}</span>
-                      </label>
-                    );
-                  })
-                ) : (
-                  <div style={{ fontSize: '12px', color: '#888', fontStyle: 'italic' }}>Đang khóa...</div>
-                )}
-              </div>
-            </div>
-
-            {/* Back / Next Buttons */}
-            <div style={{ display: 'flex', gap: '6px', marginTop: 'auto' }}>
-              <button
-                type="button"
-                onClick={handlePrev}
-                style={{
-                  flex: 1,
-                  padding: '8px 0',
-                  border: '1px solid #CCCCCC',
-                  borderRadius: '3px',
-                  backgroundColor: '#FFFFFF',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                  fontWeight: 'bold',
-                  color: '#000'
-                }}
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                onClick={handleNext}
-                style={{
-                  flex: 1,
-                  padding: '8px 0',
-                  border: '1px solid #CCCCCC',
-                  borderRadius: '3px',
-                  backgroundColor: '#FFFFFF',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                  fontWeight: 'bold',
-                  color: '#000'
-                }}
-              >
-                Next
-              </button>
-            </div>
-          </div>
-
-          {/* Right part: Question panel occupying full width, white background, no demo watermark */}
-          <div style={{
-            flex: 1,
-            backgroundColor: '#FFFFFF',
-            padding: '24px 32px',
-            overflowY: 'auto'
-          }}>
-            {!isExamStarted ? null : (
-              <>
-                <div style={{
-                  fontSize: `${localFontSize + 4}px`,
-                  fontFamily: `"${localFontFamily}", Arial, sans-serif`,
-                  fontWeight: 'bold',
-                  color: '#000',
-                  lineHeight: '1.5',
-                  marginBottom: currentQuestion?.imageUrl ? '16px' : '28px'
-                }}>
-                  <div dangerouslySetInnerHTML={{ __html: cleanHtmlExplanation(currentQuestion?.content) }} />
-                </div>
-
-                {/* Question image (if any) */}
-                {currentQuestion?.imageUrl && (
-                  <img
-                    src={currentQuestion.imageUrl}
-                    alt="Hình ảnh câu hỏi"
-                    style={{
-                      display: 'block',
-                      maxWidth: '100%',
-                      maxHeight: `${280 * (localFontSize / (config.fontSize || 14))}px`,
-                      objectFit: 'contain',
-                      borderRadius: '4px',
-                      marginBottom: '20px',
-                      border: '1px solid #CCCCCC',
-                      transition: 'max-height 0.2s ease'
-                    }}
-                  />
-                )}
-
-                {/* Choices listed underneath in plain text */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                  {currentAnswers.map((ans, idx) => {
-                    const alphabet = String.fromCharCode(65 + idx);
-                    const selectedList = currentDetail.selectedAnswersList ? currentDetail.selectedAnswersList.map(Number) : [];
-                    const isSelected = selectedList.includes(Number(ans.id));
-                    return (
-                      <div
-                        key={ans.id}
-                        style={{
-                          fontSize: `${localFontSize + 2}px`,
-                          fontFamily: `"${localFontFamily}", Arial, sans-serif`,
-                          color: isSelected ? '#0000FF' : '#000000',
-                          fontWeight: isSelected ? 'bold' : 'normal',
-                          lineHeight: '1.4'
-                        }}
-                      >
-                        {alphabet}. {ans.content}
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* 5. Footer Taskbar (larger height) */}
-        <div style={{
-          backgroundColor: '#FFFFFF',
-          borderTop: '1px solid #CCCCCC',
-          padding: '8px 20px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexShrink: 0,
-          height: '50px'
-        }}>
-          {/* Left: Checkbox and Finish Button */}
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 'bold', color: '#000', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={isFinishChecked}
-                onChange={(e) => setIsFinishChecked(e.target.checked)}
-                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-              />
-              <span>I want to finish the exam.</span>
-            </label>
-            <button
-              type="button"
-              onClick={() => handleExamSubmit(false)}
-              disabled={!isFinishChecked}
-              style={{
-                padding: '4px 20px',
-                border: '1px solid #CCCCCC',
-                borderRadius: '3px',
-                backgroundColor: '#D47A2A',
-                color: '#FFFFFF',
-                cursor: isFinishChecked ? 'pointer' : 'not-allowed',
-                opacity: isFinishChecked ? 1 : 0.6,
-                fontSize: '13px',
-                fontWeight: 'bold',
-                marginLeft: '12px'
-              }}
-            >
-              Finish
-            </button>
-          </div>
-
-          {/* Center: SEB RUNNING */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px'
-          }}>
-            <div style={{
-              fontSize: '18px',
+          <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '16px', color: '#EF4444' }}>
+            Không thể làm bài thi tại đây
+          </h2>
+          <p style={{ fontSize: '15px', color: '#9CA3AF', lineHeight: '1.6', marginBottom: '24px' }}>
+            Chế độ thi cử (Exam Mode & Self-practice Exam Mode) bắt buộc phải được thực hiện trên Cổng thi cử (Exam Portal) thông qua Safe Exam Browser để bảo mật.
+          </p>
+          <button
+            onClick={() => navigateTo({ type: 'learning' })}
+            style={{
+              padding: '10px 24px',
+              backgroundColor: '#3B82F6',
+              color: '#FFFFFF',
+              border: 'none',
+              borderRadius: '6px',
+              fontSize: '15px',
               fontWeight: 'bold',
-              color: '#1E4620',
-              fontFamily: '"Microsoft Sans Serif", Arial',
-              letterSpacing: '1px'
-            }}>
-              SEB RUNNING
-            </div>
-            {!isOnline && (
-              <span style={{
-                color: '#CC0000',
-                fontSize: '13px',
-                fontWeight: 'bold'
-              }}>
-                Lost Connect! Reconnecting...
-              </span>
-            )}
-          </div>
-
-          {/* Right: Exit */}
-          <div>
-            <button
-              type="button"
-              onClick={handleBack}
-              style={{
-                padding: '4px 20px',
-                border: '1px solid #CCCCCC',
-                borderRadius: '3px',
-                backgroundColor: '#FFFFFF',
-                color: '#000',
-                cursor: 'pointer',
-                fontSize: '13px',
-                fontWeight: 'bold'
-              }}
-            >
-              Exit
-            </button>
-          </div>
+              cursor: 'pointer'
+            }}
+          >
+            Quay lại trang chính
+          </button>
         </div>
       </div>
     );
@@ -2070,8 +1473,8 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
                       <div className="flashcard-inner">
                         {/* Front Side: Question content & Choices list */}
                         <div className="flashcard-front" style={{ padding: flashcardPadding }}>
-                          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
-                            <div style={{ fontSize: questionFontSize, fontWeight: 700, lineHeight: 1.5, textAlign: 'center', marginBottom: '20px', color: 'var(--text-primary)' }}>
+                          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'stretch', flexShrink: 0 }}>
+                            <div style={{ fontSize: questionFontSize, fontWeight: 700, lineHeight: 1.5, textAlign: 'left', width: '100%', marginBottom: '20px', color: 'var(--text-primary)' }}>
                               <div style={{ whiteSpace: 'pre-wrap' }} dangerouslySetInnerHTML={{ __html: cleanHtmlExplanation(currentQuestion?.content) }} />
                             </div>
 
@@ -2080,11 +1483,11 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
                               <img
                                 src={currentQuestion.imageUrl}
                                 alt="Hình ảnh câu hỏi"
-                                style={{ maxWidth: '100%', maxHeight: isQuestionVeryLong ? '140px' : isQuestionLong ? '180px' : '220px', objectFit: 'contain', borderRadius: '8px', marginBottom: '12px', border: '1px solid var(--border-color)' }}
+                                style={{ alignSelf: 'center', maxWidth: '100%', maxHeight: isQuestionVeryLong ? '140px' : isQuestionLong ? '180px' : '220px', objectFit: 'contain', borderRadius: '8px', marginBottom: '12px', border: '1px solid var(--border-color)' }}
                               />
                             )}
 
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: choicesGap, width: '100%', maxWidth: '600px', marginTop: '16px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: choicesGap, width: '100%', maxWidth: '600px', marginTop: '16px', alignSelf: 'center' }}>
                               {currentAnswers.map((ans, idx) => {
                                 const alphabet = String.fromCharCode(65 + idx);
                                 return (
@@ -2122,13 +1525,13 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
                                     >
                                       {alphabet}
                                     </div>
-                                    <span style={{ whiteSpace: 'pre-wrap' }}>{ans.content}</span>
+                                    <span style={{ whiteSpace: 'pre-wrap' }} dangerouslySetInnerHTML={{ __html: cleanHtmlExplanation(ans.content) }} />
                                   </div>
                                 );
                               })}
                             </div>
 
-                            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: 'auto', paddingTop: '20px' }}>
+                            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: 'auto', paddingTop: '20px', alignSelf: 'center' }}>
                               👆 Bấm bất kỳ đâu trên thẻ hoặc nhấn Space để lật qua lật lại
                             </div>
                           </div>
@@ -2179,7 +1582,7 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
                                     >
                                       {alphabet}
                                     </div>
-                                    <span style={{ whiteSpace: 'pre-wrap' }}>{ans.content}</span>
+                                    <span style={{ whiteSpace: 'pre-wrap' }} dangerouslySetInnerHTML={{ __html: cleanHtmlExplanation(ans.content) }} />
                                   </div>
                                 );
                               })}
@@ -2289,7 +1692,7 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
               <>
                 {/* Question Text Card */}
                 <div className="card p-6" style={{ borderLeft: '5px solid var(--primary-color)' }}>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 700, lineHeight: 1.5 }}>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 700, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
                     <div dangerouslySetInnerHTML={{ __html: cleanHtmlExplanation(currentQuestion?.content) }} />
                   </div>
                   {/* Question image */}
@@ -2358,9 +1761,7 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
                           {alphabet}
                         </div>
 
-                        <span style={{ fontSize: '1rem', fontWeight: isSelected ? 600 : 500 }}>
-                          {ans.content}
-                        </span>
+                        <span style={{ fontSize: '1rem', fontWeight: isSelected ? 600 : 500, whiteSpace: 'pre-wrap' }} dangerouslySetInnerHTML={{ __html: cleanHtmlExplanation(ans.content) }} />
                       </button>
                     );
                   })}
@@ -2383,7 +1784,7 @@ export const LearningPlayPage: React.FC<LearningPlayPageProps> = ({ sessionId })
                     {currentQuestion?.explanation && (
                       <div
                         className="explanation-content"
-                        style={{ fontSize: '0.95rem', lineHeight: 1.4 }}
+                        style={{ fontSize: '0.95rem', lineHeight: 1.4, whiteSpace: 'pre-wrap' }}
                         dangerouslySetInnerHTML={{ __html: cleanHtmlExplanation(currentQuestion.explanation) }}
                       />
                     )}

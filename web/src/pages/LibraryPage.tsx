@@ -9,18 +9,21 @@ export const LibraryPage: React.FC = () => {
   const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
   const [subjectCode, setSubjectCode] = useState('');
   const [subjectName, setSubjectName] = useState('');
+  const [subjectSemester, setSubjectSemester] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
 
   const handleSaveSubject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!subjectCode.trim() || !subjectName.trim()) return;
+    const semesterVal = subjectSemester === '' ? null : Number(subjectSemester);
     if (editingSubject) {
-      await updateSubject(editingSubject.id, subjectCode.toUpperCase().trim(), subjectName.trim());
+      await updateSubject(editingSubject.id, subjectCode.toUpperCase().trim(), subjectName.trim(), semesterVal);
     } else {
-      await createSubject(subjectCode.toUpperCase().trim(), subjectName.trim());
+      await createSubject(subjectCode.toUpperCase().trim(), subjectName.trim(), semesterVal);
     }
     setSubjectCode('');
     setSubjectName('');
+    setSubjectSemester('');
     setEditingSubject(null);
     setShowAddModal(false);
   };
@@ -29,6 +32,7 @@ export const LibraryPage: React.FC = () => {
     setEditingSubject(subject);
     setSubjectCode(subject.code);
     setSubjectName(subject.name);
+    setSubjectSemester(subject.semester !== undefined && subject.semester !== null ? String(subject.semester) : '');
     setShowAddModal(true);
   };
 
@@ -49,7 +53,7 @@ export const LibraryPage: React.FC = () => {
         </div>
         <button 
           className="btn btn-primary"
-          onClick={() => { setEditingSubject(null); setSubjectCode(''); setSubjectName(''); setShowAddModal(true); }}
+          onClick={() => { setEditingSubject(null); setSubjectCode(''); setSubjectName(''); setSubjectSemester(''); setShowAddModal(true); }}
         >
           <Plus size={18} />
           <span>Thêm môn học</span>
@@ -103,18 +107,32 @@ export const LibraryPage: React.FC = () => {
               >
                 <div>
                   <div className="flex justify-between items-start mb-2">
-                    <span 
-                      style={{ 
-                        fontSize: '0.8rem', 
-                        fontWeight: 700, 
-                        color: 'var(--primary-color)',
-                        backgroundColor: 'rgba(1, 117, 194, 0.1)',
-                        padding: '3px 8px',
-                        borderRadius: '4px'
-                      }}
-                    >
-                      {subject.code}
-                    </span>
+                    <div className="flex gap-2 items-center">
+                      <span 
+                        style={{ 
+                          fontSize: '0.8rem', 
+                          fontWeight: 700, 
+                          color: 'var(--primary-color)',
+                          backgroundColor: 'rgba(1, 117, 194, 0.1)',
+                          padding: '3px 8px',
+                          borderRadius: '4px'
+                        }}
+                      >
+                        {subject.code}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: '0.8rem',
+                          fontWeight: 600,
+                          color: '#475569',
+                          backgroundColor: '#f1f5f9',
+                          padding: '3px 8px',
+                          borderRadius: '4px'
+                        }}
+                      >
+                        {subject.semester !== undefined && subject.semester !== null ? `Kỳ ${subject.semester}` : 'Kỳ N/A'}
+                      </span>
+                    </div>
                     <div className="flex gap-1">
                       <button
                         className="btn btn-secondary p-1"
@@ -202,6 +220,27 @@ export const LibraryPage: React.FC = () => {
                   value={subjectName}
                   onChange={(e) => setSubjectName(e.target.value)}
                 />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Kỳ học (Semester)</label>
+                <select
+                  className="input"
+                  value={subjectSemester}
+                  onChange={(e) => setSubjectSemester(e.target.value)}
+                  style={{ width: '100%', height: '40px', padding: '8px 12px', border: '1px solid var(--border-color)', borderRadius: '6px', backgroundColor: '#FFF', outline: 'none' }}
+                >
+                  <option value="">N/A (Không rõ kỳ)</option>
+                  <option value="0">Kỳ 0</option>
+                  <option value="1">Kỳ 1</option>
+                  <option value="2">Kỳ 2</option>
+                  <option value="3">Kỳ 3</option>
+                  <option value="4">Kỳ 4</option>
+                  <option value="5">Kỳ 5</option>
+                  <option value="6">Kỳ 6</option>
+                  <option value="7">Kỳ 7</option>
+                  <option value="8">Kỳ 8</option>
+                  <option value="9">Kỳ 9</option>
+                </select>
               </div>
               <div className="modal-footer">
                 <button 

@@ -349,19 +349,35 @@ export const LoginExamPage: React.FC = () => {
               Check font
             </button>
             <a
-              href={`${window.location.protocol === 'https:' ? 'sebs://' : 'seb://'}${window.location.host}/api/config/seb`}
+              href={`${window.location.protocol === 'https:' ? 'sebs://' : 'seb://'}${window.location.host}/configs/exam_config.seb`}
               style={{
-                color: '#2563eb',
-                textDecoration: 'underline',
+                padding: '6px 14px',
+                borderRadius: '6px',
+                border: '1px solid #cbd5e1',
+                backgroundColor: '#f1f5f9',
+                color: '#475569',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                textDecoration: 'none',
                 cursor: 'pointer',
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
-                gap: '4px',
-                fontWeight: 500
+                gap: '6px',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.backgroundColor = '#e2e8f0';
+                e.currentTarget.style.color = '#1e293b';
+                e.currentTarget.style.borderColor = '#94a3b8';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.backgroundColor = '#f1f5f9';
+                e.currentTarget.style.color = '#475569';
+                e.currentTarget.style.borderColor = '#cbd5e1';
               }}
             >
-              <Shield size={14} />
-              :Run SEB
+              <Shield size={13} style={{ color: '#1e3a8a' }} />
+              Run SEB
             </a>
           </div>
 

@@ -108,7 +108,7 @@ router.get('/google/callback', async (req, res) => {
             httpOnly: true,
             sameSite: 'lax',
             maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-            // secure: true, // Uncomment when using HTTPS
+            secure: process.env.NODE_ENV === 'production',
         });
         res.redirect(FRONTEND_URL);
     }
